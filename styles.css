@@ -960,3 +960,91 @@ nav.tab-bar button.active .dot {
   white-space: nowrap;
   border: 0;
 }
+
+/* ---------- Profile editing ---------- */
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 6px 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--clay-dark);
+  text-decoration: underline;
+  min-height: 36px;
+}
+
+#profile-edit textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 11px;
+  font-family: inherit;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  background: var(--surface);
+  color: var(--charcoal);
+  resize: vertical;
+}
+
+#profile-edit .field-label {
+  margin-top: 12px;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.profile-actions .buy-btn,
+.profile-actions .ghost-btn {
+  flex: 1;
+  justify-content: center;
+  text-align: center;
+  border: none;
+}
+
+.profile-actions .ghost-btn {
+  border: 1px solid var(--border);
+}
+
+/* ---------- Rejection reason chips ---------- */
+
+.feedback-wrap {
+  margin-top: 10px;
+}
+
+.feedback-wrap .feedback-row {
+  margin-top: 0;
+}
+
+.reason-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
+.reason-chips[hidden] {
+  display: none;
+}
+
+.reason-chip {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--charcoal-soft);
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.reason-chip.active {
+  background: var(--clay);
+  border-color: var(--clay);
+  color: #fff;
+}

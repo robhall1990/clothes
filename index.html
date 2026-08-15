@@ -30,6 +30,19 @@
   <details>
     <summary></summary>
     <p class="profile-body" id="profile-body"></p>
+    <button type="button" id="profile-edit-btn" class="link-btn">Edit profile</button>
+    <div id="profile-edit" hidden>
+      <label class="field-label" for="profile-build">Build</label>
+      <textarea id="profile-build" rows="2" placeholder="e.g. 6ft, narrow shoulders, muscular legs"></textarea>
+      <label class="field-label" for="profile-sizes">Sizes &amp; fit</label>
+      <textarea id="profile-sizes" rows="2" placeholder="e.g. Tops M, trousers 32/32, shoes UK 10, slim-to-straight"></textarea>
+      <p class="field-hint">Used in every outfit suggestion and generated image.</p>
+      <div class="profile-actions">
+        <button type="button" id="profile-cancel" class="ghost-btn">Cancel</button>
+        <button type="button" id="profile-save" class="buy-btn">Save</button>
+      </div>
+      <button type="button" id="profile-reset" class="link-btn" hidden>Reset to default</button>
+    </div>
   </details>
 </div>
 

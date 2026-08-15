@@ -289,17 +289,26 @@ const WardrobeGemini = (function () {
     const weatherLine = weather && typeof WardrobeWeather !== "undefined" ? WardrobeWeather.promptLine(weather) : "";
     if (weatherLine) lines.push(weatherLine);
 
+    // Entries may be plain strings (older callers) or { name, reason }.
+    const describeFeedback = (entry) => {
+      if (typeof entry === "string") return entry;
+      if (!entry || !entry.name) return "";
+      return entry.reason ? entry.name + " (" + entry.reason.toLowerCase() + ")" : entry.name;
+    };
+
     if (feedback && (feedback.liked || []).length) {
       lines.push(
         "",
         "The client liked these previous outfits — lean towards this kind of combination: " +
-          feedback.liked.join("; ")
+          feedback.liked.map(describeFeedback).filter(Boolean).join("; ")
       );
     }
     if (feedback && (feedback.disliked || []).length) {
       lines.push(
-        "The client rejected these previous outfits — do not propose anything close to them: " +
-          feedback.disliked.join("; ")
+        "The client rejected these previous outfits, with their reason where given — do not propose " +
+          "anything close to them, and treat each reason as a standing preference to apply to every " +
+          "outfit you suggest: " +
+          feedback.disliked.map(describeFeedback).filter(Boolean).join("; ")
       );
     }
 
@@ -400,7 +409,7 @@ const WardrobeGemini = (function () {
       throw new GeminiError("Gemini's response wasn't in the expected format.", "bad-response");
     }
 
-    return parsed
+    const outfits = parsed
       .filter((o) => o && typeof o.name === "string" && typeof o.pieces === "string")
       .map((o, i) => {
         const rawNewItem = typeof o.newItem === "string" ? o.newItem.trim() : "";
@@ -417,6 +426,15 @@ const WardrobeGemini = (function () {
           uses,
         };
       });
+
+    // Surface an empty result as an error rather than returning it: callers
+    // overwrite the visible list with whatever comes back, and silently
+    // replacing a good set of outfits with nothing is worse than a retry.
+    if (!outfits.length) {
+      throw new GeminiError("Gemini didn't return any usable outfit ideas — try again.", "bad-response");
+    }
+
+    return outfits;
   }
 
   return {

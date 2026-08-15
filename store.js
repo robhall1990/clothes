@@ -14,7 +14,19 @@ const WardrobeStore = (function () {
     feedback: "wardrobe-capsule-outfit-feedback-v1",
     wears: "wardrobe-capsule-wear-log-v1",
     today: "wardrobe-capsule-today-v1",
+    profile: "wardrobe-capsule-profile-v1",
   };
+
+  // Reasons offered when an outfit is rejected. "Why" is a far stronger
+  // steer for the next generation than a bare thumbs-down.
+  const FEEDBACK_REASONS = [
+    "Too warm",
+    "Too cold",
+    "Too formal",
+    "Too casual",
+    "Wrong colours",
+    "Not my style",
+  ];
 
   const DB_NAME = "wardrobe-capsule-db";
   const DB_VERSION = 2;
@@ -229,32 +241,95 @@ const WardrobeStore = (function () {
     return prefix + "-" + Date.now() + "-" + Math.round(Math.random() * 1e6);
   }
 
+  /* ---------- Profile ---------- */
+
+  // data.js ships a default profile; anything saved here overrides it, so the
+  // most personal input to every prompt is editable without a code change.
+  function getProfile() {
+    const base = (typeof WARDROBE_DATA !== "undefined" && WARDROBE_DATA.profile) || { build: "", sizes: "" };
+    const saved = loadJson(KEYS.profile, null);
+    return saved ? { ...base, ...saved } : { ...base };
+  }
+
+  function setProfile(profile) {
+    saveJson(KEYS.profile, { build: profile.build || "", sizes: profile.sizes || "" });
+    return getProfile();
+  }
+
+  function resetProfile() {
+    try {
+      localStorage.removeItem(KEYS.profile);
+    } catch (e) {
+      /* ignore */
+    }
+    return getProfile();
+  }
+
+  function isProfileCustomised() {
+    return !!loadJson(KEYS.profile, null);
+  }
+
   /* ---------- Outfit feedback (thumbs up / down) ---------- */
 
   // Keyed by outfit name so a rating survives rotation and re-generation of
-  // the surrounding list. Value is "up" | "down".
+  // the surrounding list. Entries are { verdict, reason, at }; older builds
+  // stored a bare "up"/"down" string, which is migrated on read.
   function getFeedback() {
-    return loadJson(KEYS.feedback, {});
+    const raw = loadJson(KEYS.feedback, {});
+    const out = {};
+    Object.keys(raw).forEach((name) => {
+      const v = raw[name];
+      if (typeof v === "string") out[name] = { verdict: v, reason: "", at: 0 };
+      else if (v && typeof v === "object" && v.verdict) {
+        out[name] = { verdict: v.verdict, reason: v.reason || "", at: v.at || 0 };
+      }
+    });
+    return out;
   }
-  function setOutfitFeedback(outfitName, verdict) {
+
+  function setOutfitFeedback(outfitName, verdict, reason) {
     const all = getFeedback();
-    if (verdict) all[outfitName] = verdict;
-    else delete all[outfitName];
+    if (verdict) {
+      const existing = all[outfitName];
+      all[outfitName] = {
+        verdict,
+        // Keep an existing reason when re-affirming the same verdict, drop it
+        // when the verdict flips (a "too warm" note makes no sense on a like).
+        reason: verdict === "down" ? (reason !== undefined ? reason : (existing && existing.verdict === "down" && existing.reason) || "") : "",
+        at: Date.now(),
+      };
+    } else {
+      delete all[outfitName];
+    }
     saveJson(KEYS.feedback, all);
     return all;
   }
+
   function getFeedbackVerdict(outfitName) {
-    return getFeedback()[outfitName] || null;
+    const entry = getFeedback()[outfitName];
+    return entry ? entry.verdict : null;
   }
 
-  // Split into plain name lists for prompting.
+  function getFeedbackReason(outfitName) {
+    const entry = getFeedback()[outfitName];
+    return entry && entry.verdict === "down" ? entry.reason || "" : "";
+  }
+
+  // Most recent ratings only — prompts shouldn't grow without bound as the
+  // rating history builds up, and recent taste is the relevant taste.
+  const FEEDBACK_PROMPT_CAP = 8;
+
   function getFeedbackLists() {
     const all = getFeedback();
+    const entries = Object.keys(all).map((name) => ({ name, ...all[name] }));
+    entries.sort((a, b) => b.at - a.at);
     const liked = [];
     const disliked = [];
-    Object.keys(all).forEach((name) => {
-      if (all[name] === "up") liked.push(name);
-      else if (all[name] === "down") disliked.push(name);
+    entries.forEach((e) => {
+      if (e.verdict === "up" && liked.length < FEEDBACK_PROMPT_CAP) liked.push({ name: e.name });
+      else if (e.verdict === "down" && disliked.length < FEEDBACK_PROMPT_CAP) {
+        disliked.push({ name: e.name, reason: e.reason || "" });
+      }
     });
     return { liked, disliked };
   }
@@ -312,9 +387,15 @@ const WardrobeStore = (function () {
 
   return {
     KEYS,
+    FEEDBACK_REASONS,
     loadJson,
     saveJson,
     newId,
+    // profile
+    getProfile,
+    setProfile,
+    resetProfile,
+    isProfileCustomised,
     // ownership
     tokenize,
     namesMatch,
@@ -332,6 +413,7 @@ const WardrobeStore = (function () {
     getFeedback,
     setOutfitFeedback,
     getFeedbackVerdict,
+    getFeedbackReason,
     getFeedbackLists,
     // wears
     getWears,
