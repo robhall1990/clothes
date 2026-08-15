@@ -219,6 +219,32 @@ section.block h2 {
   line-height: 1.5;
 }
 
+.new-item-chip {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px dashed var(--clay);
+  border-radius: 10px;
+  background: rgba(181, 101, 63, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.new-item-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--clay-dark);
+  line-height: 1.35;
+}
+
+.new-item-chip .new-item-buy {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 0.8rem;
+}
+
 .outfit-image-wrap {
   margin-top: 12px;
 }

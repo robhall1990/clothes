@@ -77,6 +77,41 @@
     return a;
   }
 
+  // buyableItemMap, when given, is a Map of name -> item (as from
+  // allItemsByName) used to render a "New" buy chip when outfit.newItem is
+  // set — the one not-yet-owned piece Gemini suggested for this look.
+  function buildOutfitCard(outfit, cacheNamespace, buyableItemMap) {
+    const card = document.createElement("div");
+    card.className = "outfit-card";
+    const name = document.createElement("p");
+    name.className = "outfit-name";
+    name.textContent = outfit.name;
+    const pieces = document.createElement("p");
+    pieces.className = "outfit-pieces";
+    pieces.textContent = outfit.pieces;
+    card.appendChild(name);
+    card.appendChild(pieces);
+
+    if (outfit.newItem && buyableItemMap && buyableItemMap.has(outfit.newItem)) {
+      const newItemData = buyableItemMap.get(outfit.newItem);
+      const chip = document.createElement("div");
+      chip.className = "new-item-chip";
+      const label = document.createElement("span");
+      label.className = "new-item-label";
+      label.textContent = "New: " + outfit.newItem + " · " + money(newItemData.price);
+      chip.appendChild(label);
+      chip.appendChild(buyLink(newItemData, "new-item-buy"));
+      card.appendChild(chip);
+    }
+
+    const imageWrap = document.createElement("div");
+    imageWrap.className = "outfit-image-wrap";
+    card.appendChild(imageWrap);
+    mountOutfitImage(imageWrap, cacheNamespace, outfit);
+
+    return card;
+  }
+
   function renderCapsulePanel(capsule) {
     const panel = document.createElement("div");
     panel.className = "panel";
@@ -115,25 +150,69 @@
     outfitsH2.textContent = "Outfit combinations";
     outfitsSection.appendChild(outfitsH2);
 
-    capsule.outfits.forEach((outfit) => {
-      const card = document.createElement("div");
-      card.className = "outfit-card";
-      const name = document.createElement("p");
-      name.className = "outfit-name";
-      name.textContent = outfit.name;
-      const pieces = document.createElement("p");
-      pieces.className = "outfit-pieces";
-      pieces.textContent = outfit.pieces;
-      card.appendChild(name);
-      card.appendChild(pieces);
+    const rotateNote = document.createElement("p");
+    rotateNote.className = "empty-note";
+    rotateNote.textContent =
+      "Uses what's in My Wardrobe, plus at most one new piece per outfit from " + capsule.name + " items.";
+    outfitsSection.appendChild(rotateNote);
 
-      const imageWrap = document.createElement("div");
-      imageWrap.className = "outfit-image-wrap";
-      card.appendChild(imageWrap);
-      mountOutfitImage(imageWrap, capsule.name, outfit);
+    const rotateBtn = document.createElement("button");
+    rotateBtn.type = "button";
+    rotateBtn.className = "generate-btn full-width";
+    rotateBtn.textContent = "Rotate outfit ideas";
+    outfitsSection.appendChild(rotateBtn);
 
-      outfitsSection.appendChild(card);
+    const rotateStatus = document.createElement("p");
+    rotateStatus.className = "generate-status";
+    rotateStatus.hidden = true;
+    outfitsSection.appendChild(rotateStatus);
+
+    const outfitsList = document.createElement("div");
+    outfitsSection.appendChild(outfitsList);
+
+    const storageKey = "wardrobe-capsule-rotated-" + capsule.name.toLowerCase() + "-v1";
+    let currentOutfits = loadJson(storageKey, capsule.outfits);
+
+    function renderOutfitsList() {
+      outfitsList.innerHTML = "";
+      const buyableItemMap = allItemsByName(WARDROBE_DATA);
+      currentOutfits.forEach((outfit) => {
+        outfitsList.appendChild(buildOutfitCard(outfit, capsule.name, buyableItemMap));
+      });
+    }
+
+    rotateBtn.addEventListener("click", async () => {
+      rotateBtn.disabled = true;
+      rotateStatus.hidden = false;
+      rotateStatus.classList.remove("generate-error");
+      rotateStatus.textContent = "Asking Gemini to rotate these outfits…";
+
+      try {
+        const fullOwnedPool = getFullOwnedPool(WARDROBE_DATA);
+        const ownedNames = new Set(fullOwnedPool.map((it) => it.name));
+        const newItemCandidates = capsule.items.filter((it) => !ownedNames.has(it.name));
+
+        const outfits = await WardrobeGemini.generateOutfitIdeas({
+          wardrobeItems: fullOwnedPool,
+          exampleOutfits: capsule.outfits,
+          profile: WARDROBE_DATA.profile,
+          count: capsule.outfits.length,
+          newItemCandidates,
+        });
+        currentOutfits = outfits;
+        saveJson(storageKey, currentOutfits);
+        rotateStatus.hidden = true;
+        renderOutfitsList();
+      } catch (err) {
+        rotateStatus.hidden = false;
+        rotateStatus.classList.add("generate-error");
+        rotateStatus.textContent = err && err.message ? err.message : "Something went wrong rotating these outfits.";
+      } finally {
+        rotateBtn.disabled = false;
+      }
     });
+
+    renderOutfitsList();
 
     panel.appendChild(itemsSection);
     panel.appendChild(outfitsSection);
@@ -354,12 +433,13 @@
     }
 
     function renderIdeasIntro() {
-      if (ownedItems.length < 3) {
-        ideasIntro.textContent = "Log at least 3 items to generate outfit ideas.";
+      if (getFullOwnedPool(data).length < 3) {
+        ideasIntro.textContent = "Log at least 3 items (or import bought ones) to generate outfit ideas.";
         generateBtn.hidden = true;
       } else {
         ideasIntro.textContent =
-          "Gemini will combine what's above into new outfit ideas, styled like the suggestions in the other tabs.";
+          "Gemini will combine what's above into new outfit ideas, styled like the suggestions in the other " +
+          "tabs — with the option of one not-yet-bought piece per outfit.";
         generateBtn.hidden = false;
       }
     }
@@ -367,24 +447,9 @@
     function renderGeneratedOutfits() {
       ideasList.innerHTML = "";
       generateBtn.textContent = generatedOutfits.length ? "Regenerate outfit ideas" : "Generate outfit ideas";
+      const buyableItemMap = allItemsByName(data);
       generatedOutfits.forEach((outfit) => {
-        const card = document.createElement("div");
-        card.className = "outfit-card";
-        const name = document.createElement("p");
-        name.className = "outfit-name";
-        name.textContent = outfit.name;
-        const pieces = document.createElement("p");
-        pieces.className = "outfit-pieces";
-        pieces.textContent = outfit.pieces;
-        card.appendChild(name);
-        card.appendChild(pieces);
-
-        const imageWrap = document.createElement("div");
-        imageWrap.className = "outfit-image-wrap";
-        card.appendChild(imageWrap);
-        mountOutfitImage(imageWrap, "Wardrobe", outfit);
-
-        ideasList.appendChild(card);
+        ideasList.appendChild(buildOutfitCard(outfit, "Wardrobe", buyableItemMap));
       });
     }
 
@@ -434,14 +499,18 @@
 
       const allOutfits = data.capsules.flatMap((c) => c.outfits);
       const exampleOutfits = allOutfits.slice(0, 3);
-      const count = Math.max(3, Math.min(6, Math.round(ownedItems.length / 2)));
+      const fullOwnedPool = getFullOwnedPool(data);
+      const ownedNames = new Set(fullOwnedPool.map((it) => it.name));
+      const newItemCandidates = Array.from(allItemsByName(data).values()).filter((it) => !ownedNames.has(it.name));
+      const count = Math.max(3, Math.min(6, Math.round(fullOwnedPool.length / 2)));
 
       try {
         const outfits = await WardrobeGemini.generateOutfitIdeas({
-          wardrobeItems: ownedItems,
+          wardrobeItems: fullOwnedPool,
           exampleOutfits,
           profile: data.profile,
           count,
+          newItemCandidates,
         });
         generatedOutfits = outfits;
         saveJson(GENERATED_OUTFITS_KEY, generatedOutfits);
@@ -545,6 +614,20 @@
       });
     });
     return map;
+  }
+
+  // Everything the wearer already owns: items logged in My Wardrobe, plus any
+  // capsule catalogue item already checked off as bought — even if it was
+  // never explicitly imported into My Wardrobe.
+  function getFullOwnedPool(data) {
+    const map = new Map();
+    ownedItems.forEach((it) => map.set(it.name, { name: it.name, notes: it.notes }));
+    data.capsules.forEach((capsule) => {
+      capsule.items.forEach((it) => {
+        if (boughtState[it.name] && !map.has(it.name)) map.set(it.name, { name: it.name });
+      });
+    });
+    return Array.from(map.values());
   }
 
   function renderShoppingPanel(data) {
