@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Wardrobe Capsule</title>
+<meta name="description" content="Weekend, work and evening capsule wardrobes with outfit combinations and a shopping list." />
+<meta name="theme-color" content="#262420" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Wardrobe" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="app-header">
+  <h1>Wardrobe Capsule</h1>
+  <p class="tagline">Weekend, work &amp; evening — built around what you already own.</p>
+</header>
+
+<div class="profile-strip">
+  <details>
+    <summary></summary>
+    <p class="profile-body" id="profile-body"></p>
+  </details>
+</div>
+
+<main id="main-content"></main>
+
+<nav class="tab-bar" id="tab-bar" role="tablist" aria-label="Wardrobe sections"></nav>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
