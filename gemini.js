@@ -10,8 +10,6 @@ const WardrobeGemini = (function () {
 
   const KEY_STORAGE = "wardrobe-capsule-gemini-key-v1";
   const SETTINGS_STORAGE = "wardrobe-capsule-gemini-settings-v1";
-  const DB_NAME = "wardrobe-capsule-db";
-  const DB_STORE = "outfit-images";
 
   const DEFAULT_SETTINGS = {
     model: "gemini-2.5-flash-image",
@@ -67,54 +65,19 @@ const WardrobeGemini = (function () {
     return merged;
   }
 
-  let dbPromise = null;
-  function openDb() {
-    if (dbPromise) return dbPromise;
-    dbPromise = new Promise((resolve, reject) => {
-      if (!("indexedDB" in window)) {
-        reject(new Error("IndexedDB unavailable"));
-        return;
-      }
-      const req = indexedDB.open(DB_NAME, 1);
-      req.onupgradeneeded = () => {
-        req.result.createObjectStore(DB_STORE, { keyPath: "key" });
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    return dbPromise;
-  }
-
   function outfitKey(capsuleName, outfitName) {
     return capsuleName + "::" + outfitName;
   }
 
-  async function getCachedImage(key) {
-    try {
-      const db = await openDb();
-      return await new Promise((resolve, reject) => {
-        const tx = db.transaction(DB_STORE, "readonly");
-        const req = tx.objectStore(DB_STORE).get(key);
-        req.onsuccess = () => resolve(req.result ? req.result.dataUrl : null);
-        req.onerror = () => reject(req.error);
-      });
-    } catch (e) {
-      return null;
-    }
+  // Image caching lives in WardrobeStore, which owns the IndexedDB schema —
+  // two modules opening the same database at different versions would deadlock
+  // each other on upgrade.
+  function getCachedImage(key) {
+    return WardrobeStore.dbGet(WardrobeStore.STORE_IMAGES, key);
   }
 
-  async function setCachedImage(key, dataUrl, meta) {
-    try {
-      const db = await openDb();
-      await new Promise((resolve, reject) => {
-        const tx = db.transaction(DB_STORE, "readwrite");
-        tx.objectStore(DB_STORE).put({ key, dataUrl, ...meta, savedAt: Date.now() });
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-      });
-    } catch (e) {
-      /* image just won't be cached */
-    }
+  function setCachedImage(key, dataUrl, meta) {
+    return WardrobeStore.dbPut(WardrobeStore.STORE_IMAGES, key, dataUrl, meta);
   }
 
   function buildPrompt(capsuleName, outfit, profile, style) {
@@ -238,13 +201,25 @@ const WardrobeGemini = (function () {
   // mechanism for "at most one new item per outfit, if any" — the model can
   // literally only choose one of the provided names, or NO_NEW_ITEM, never
   // invent one or list several.
-  function buildOutfitSchema(newItemCandidates) {
+  function buildOutfitSchema(newItemCandidates, wardrobeItems) {
     const properties = {
       name: { type: "STRING" },
       pieces: { type: "STRING" },
     };
     const required = ["name", "pieces"];
     const propertyOrdering = ["name", "pieces"];
+
+    // Each entry is enum-locked to a garment actually in the wardrobe, so the
+    // returned list can be matched back by exact name instead of parsing the
+    // prose in `pieces`.
+    if (wardrobeItems && wardrobeItems.length) {
+      properties.usesOwned = {
+        type: "ARRAY",
+        items: { type: "STRING", enum: wardrobeItems.map((it) => it.name) },
+      };
+      required.push("usesOwned");
+      propertyOrdering.push("usesOwned");
+    }
 
     if (newItemCandidates && newItemCandidates.length) {
       properties.newItem = {
@@ -280,7 +255,19 @@ const WardrobeGemini = (function () {
     );
   }
 
-  function buildOutfitIdeasPrompt(wardrobeItems, exampleOutfits, profile, count, newItemCandidates, styleNotes) {
+  function buildOutfitIdeasPrompt(opts) {
+    const {
+      wardrobeItems,
+      exampleOutfits,
+      profile,
+      count,
+      newItemCandidates,
+      styleNotes,
+      weather,
+      feedback,
+      avoidRepeats,
+    } = opts;
+
     const examples = exampleOutfits
       .map((o) => 'name: "' + o.name + '" — pieces: "' + o.pieces + '"')
       .join("\n");
@@ -297,11 +284,37 @@ const WardrobeGemini = (function () {
       getSeasonHint(new Date()),
     ];
 
+    // Live weather is more specific than the season and should win where they
+    // disagree (a cold snap in June, a mild December).
+    const weatherLine = weather && typeof WardrobeWeather !== "undefined" ? WardrobeWeather.promptLine(weather) : "";
+    if (weatherLine) lines.push(weatherLine);
+
+    if (feedback && (feedback.liked || []).length) {
+      lines.push(
+        "",
+        "The client liked these previous outfits — lean towards this kind of combination: " +
+          feedback.liked.join("; ")
+      );
+    }
+    if (feedback && (feedback.disliked || []).length) {
+      lines.push(
+        "The client rejected these previous outfits — do not propose anything close to them: " +
+          feedback.disliked.join("; ")
+      );
+    }
+
+    if (avoidRepeats && avoidRepeats.length) {
+      lines.push(
+        "",
+        "Recently worn, so avoid repeating these looks: " + avoidRepeats.join("; ")
+      );
+    }
+
     if (styleNotes && styleNotes.trim()) {
       lines.push(
         "",
         "Client's style notes (read carefully — these take priority over any other assumption, including the " +
-          "season hint above if they conflict): " +
+          "season and weather hints above if they conflict): " +
           styleNotes.trim()
       );
     }
@@ -329,32 +342,38 @@ const WardrobeGemini = (function () {
       '6. Each outfit "pieces" string lists the garments joined with " + ", in the order worn outside-in, with an optional short styling note in parentheses (e.g. "(open)", "(tucked)", "(collar out)") — match the tone of the examples exactly.'
     );
 
-    if (hasNewItems) {
+    let n = 7;
+    if (wardrobeItems.length) {
       lines.push(
-        '7. If an outfit uses one of the "not yet owned" garments, its exact name (copied verbatim from that list) goes in the "newItem" field, and that garment must also appear in "pieces" like any other item. If an outfit uses none of them, set "newItem" to "' +
-          NO_NEW_ITEM +
-          '". Never use more than one not-yet-owned garment in a single outfit.',
-        "8. Return exactly " + count + " outfits — no more, no fewer.",
-        "9. Respond with JSON only, matching the given schema. No commentary, no markdown fences."
-      );
-    } else {
-      lines.push(
-        "7. Return exactly " + count + " outfits — no more, no fewer.",
-        "8. Respond with JSON only, matching the given schema. No commentary, no markdown fences."
+        n++ +
+          '. "usesOwned" lists the exact names (copied verbatim from the "Owned garments" list) of every owned garment the outfit uses. It must agree with "pieces" — same garments, no more, no fewer.'
       );
     }
+    if (hasNewItems) {
+      lines.push(
+        n++ +
+          '. If an outfit uses one of the "not yet owned" garments, its exact name (copied verbatim from that list) goes in the "newItem" field, and that garment must also appear in "pieces" like any other item. If an outfit uses none of them, set "newItem" to "' +
+          NO_NEW_ITEM +
+          '". Never use more than one not-yet-owned garment in a single outfit.'
+      );
+    }
+    lines.push(
+      n++ + ". Return exactly " + count + " outfits — no more, no fewer.",
+      n + ". Respond with JSON only, matching the given schema. No commentary, no markdown fences."
+    );
 
     return lines.join("\n");
   }
 
-  async function generateOutfitIdeas({ wardrobeItems, exampleOutfits, profile, count, newItemCandidates }) {
+  async function generateOutfitIdeas(opts) {
+    const { wardrobeItems, newItemCandidates } = opts;
     const apiKey = getApiKey();
     if (!apiKey) {
       throw new GeminiError("Add a Gemini API key in Settings first.", "no-key");
     }
     const { textModel, styleNotes } = getSettings();
-    const prompt = buildOutfitIdeasPrompt(wardrobeItems, exampleOutfits, profile, count, newItemCandidates, styleNotes);
-    const schema = buildOutfitSchema(newItemCandidates);
+    const prompt = buildOutfitIdeasPrompt({ ...opts, styleNotes });
+    const schema = buildOutfitSchema(newItemCandidates, wardrobeItems);
 
     const json = await callGenerateContent(textModel, apiKey, {
       contents: [{ parts: [{ text: prompt }] }],
@@ -384,12 +403,18 @@ const WardrobeGemini = (function () {
     return parsed
       .filter((o) => o && typeof o.name === "string" && typeof o.pieces === "string")
       .map((o, i) => {
-        const newItem = typeof o.newItem === "string" ? o.newItem.trim() : "";
+        const rawNewItem = typeof o.newItem === "string" ? o.newItem.trim() : "";
+        const newItem = rawNewItem === NO_NEW_ITEM ? "" : rawNewItem;
+        const usesOwned = Array.isArray(o.usesOwned) ? o.usesOwned.filter((u) => typeof u === "string" && u) : [];
+        // `uses` is the full piece list — owned garments plus the optional new
+        // one — and is what ownership badges are computed from.
+        const uses = usesOwned.concat(newItem ? [newItem] : []);
         return {
           id: "gen-" + Date.now() + "-" + i,
           name: o.name.trim(),
           pieces: o.pieces.trim(),
-          newItem: newItem === NO_NEW_ITEM ? "" : newItem,
+          newItem,
+          uses,
         };
       });
   }
