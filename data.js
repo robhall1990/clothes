@@ -15,10 +15,45 @@ const WARDROBE_DATA = {
         { name: "Clarks Desert Boot, sand suede", price: 99, url: "https://www.clarks.com/en-gb/desert-boot/26155527-p" },
       ],
       outfits: [
-        { name: "Saturday park run", pieces: "Overshirt (open) + plain white tee + mid-wash jeans + desert boots" },
-        { name: "Coffee & school pickup", pieces: "Oatmeal knit over an Oxford shirt (collar out) + stone chinos + desert boots" },
-        { name: "The one that fixes it", pieces: "Forest knitted polo tucked into stone chinos + desert boots" },
-        { name: "Cooler weekend layering", pieces: "Overshirt over the forest polo + mid-wash jeans + desert boots" },
+        {
+          name: "Saturday park run",
+          pieces: "Overshirt (open) + plain white tee + mid-wash jeans + desert boots",
+          uses: [
+            "Arket Corduroy Overshirt, khaki green",
+            "Plain white tee",
+            "Percival Straight Leg Heritage Jeans, mid wash blue",
+            "Clarks Desert Boot, sand suede",
+          ],
+        },
+        {
+          name: "Coffee & school pickup",
+          pieces: "Oatmeal knit over an Oxford shirt (collar out) + stone chinos + desert boots",
+          uses: [
+            "Arket Heavy Knit Wool Jumper, oatmeal",
+            "White Oxford shirt",
+            "Percival Straight Leg Chino, stone/ecru",
+            "Clarks Desert Boot, sand suede",
+          ],
+        },
+        {
+          name: "The one that fixes it",
+          pieces: "Forest knitted polo tucked into stone chinos + desert boots",
+          uses: [
+            "Percival Casa Martini Knitted Polo, forest green",
+            "Percival Straight Leg Chino, stone/ecru",
+            "Clarks Desert Boot, sand suede",
+          ],
+        },
+        {
+          name: "Cooler weekend layering",
+          pieces: "Overshirt over the forest polo + mid-wash jeans + desert boots",
+          uses: [
+            "Arket Corduroy Overshirt, khaki green",
+            "Percival Casa Martini Knitted Polo, forest green",
+            "Percival Straight Leg Heritage Jeans, mid wash blue",
+            "Clarks Desert Boot, sand suede",
+          ],
+        },
       ],
     },
     {
@@ -30,10 +65,40 @@ const WARDROBE_DATA = {
         { name: "Kleman Padror Derby, black", price: 145, url: "https://www.percivalclo.com/products/kleman-padror-shoe-noir" },
       ],
       outfits: [
-        { name: "Everyday office", pieces: "Navy knitted polo + navy trousers + Kleman derbies" },
-        { name: "Casual Friday", pieces: "Oxford shirt untucked, sleeves rolled + black jeans + Kleman derbies" },
-        { name: "External stakeholder day", pieces: "Blazer over the navy knitted polo + navy trousers + Kleman derbies" },
-        { name: "Full smart-casual", pieces: "Blazer + white Oxford (open collar) + black jeans + Kleman derbies" },
+        {
+          name: "Everyday office",
+          pieces: "Navy knitted polo + navy trousers + Kleman derbies",
+          uses: [
+            "Percival Casa Martini Knitted Polo, navy",
+            "Percival Blake Double Pleated Trousers, navy",
+            "Kleman Padror Derby, black",
+          ],
+        },
+        {
+          name: "Casual Friday",
+          pieces: "Oxford shirt untucked, sleeves rolled + black jeans + Kleman derbies",
+          uses: ["White Oxford shirt", "Black jeans", "Kleman Padror Derby, black"],
+        },
+        {
+          name: "External stakeholder day",
+          pieces: "Blazer over the navy knitted polo + navy trousers + Kleman derbies",
+          uses: [
+            "Arket Cotton Hopsack Blazer",
+            "Percival Casa Martini Knitted Polo, navy",
+            "Percival Blake Double Pleated Trousers, navy",
+            "Kleman Padror Derby, black",
+          ],
+        },
+        {
+          name: "Full smart-casual",
+          pieces: "Blazer + white Oxford (open collar) + black jeans + Kleman derbies",
+          uses: [
+            "Arket Cotton Hopsack Blazer",
+            "White Oxford shirt",
+            "Black jeans",
+            "Kleman Padror Derby, black",
+          ],
+        },
       ],
     },
     {
@@ -43,11 +108,47 @@ const WARDROBE_DATA = {
         { name: "Arket Fine Knit Merino Turtleneck, black", price: 69, url: "https://www.arket.com/en-ww/men/clothing/knitwear/merino/" },
       ],
       outfits: [
-        { name: "The suit, reworked", pieces: "Navy suit jacket + merino turtleneck (no shirt/tie) + loafers" },
-        { name: "Dinner without the full suit", pieces: "Merino turtleneck + suit trousers on their own + loafers" },
-        { name: "Existing winner, finished", pieces: "Black crew + white shirt (collar out) + suit trousers + loafers" },
+        {
+          name: "The suit, reworked",
+          pieces: "Navy suit jacket + merino turtleneck (no shirt/tie) + loafers",
+          uses: [
+            "Navy suit jacket",
+            "Arket Fine Knit Merino Turtleneck, black",
+            "Percival x Solovair Hi-Shine Tassel Loafer, black",
+          ],
+        },
+        {
+          name: "Dinner without the full suit",
+          pieces: "Merino turtleneck + suit trousers on their own + loafers",
+          uses: [
+            "Arket Fine Knit Merino Turtleneck, black",
+            "Navy suit trousers",
+            "Percival x Solovair Hi-Shine Tassel Loafer, black",
+          ],
+        },
+        {
+          name: "Existing winner, finished",
+          pieces: "Black crew + white shirt (collar out) + suit trousers + loafers",
+          uses: [
+            "Black crew neck",
+            "White Oxford shirt",
+            "Navy suit trousers",
+            "Percival x Solovair Hi-Shine Tassel Loafer, black",
+          ],
+        },
       ],
     },
+  ],
+  // Pieces the original capsule plan assumes are already owned. Offered as a
+  // one-tap seed on the Wardrobe tab so outfit ownership badges mean something
+  // before anything has been logged by hand.
+  assumedBasics: [
+    { name: "Navy suit jacket", category: "Outerwear" },
+    { name: "Navy suit trousers", category: "Trousers & denim" },
+    { name: "White Oxford shirt", category: "Tops & shirts" },
+    { name: "Plain white tee", category: "Tops & shirts" },
+    { name: "Black crew neck", category: "Knitwear" },
+    { name: "Black jeans", category: "Trousers & denim" },
   ],
   shoppingListPriorityOrder: [
     "Clarks Desert Boot, sand suede",
