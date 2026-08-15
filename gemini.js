@@ -17,6 +17,7 @@ const WardrobeGemini = (function () {
     model: "gemini-2.5-flash-image",
     style: "flat-lay",
     textModel: "gemini-2.5-flash",
+    styleNotes: "",
   };
 
   const MODEL_OPTIONS = [
@@ -260,7 +261,26 @@ const WardrobeGemini = (function () {
     };
   }
 
-  function buildOutfitIdeasPrompt(wardrobeItems, exampleOutfits, profile, count, newItemCandidates) {
+  // Northern-hemisphere meteorological seasons — the wardrobe data (GBP
+  // prices, UK sizing) is UK-based, so this is a reasonable default. This
+  // runs client-side against the real current date, not the model's
+  // knowledge cutoff, so it stays correct regardless of when it's asked.
+  function getSeasonHint(date) {
+    const month = date.getMonth();
+    const season = month <= 1 || month === 11 ? "winter" : month <= 4 ? "spring" : month <= 7 ? "summer" : "autumn";
+    const monthName = date.toLocaleDateString("en-GB", { month: "long" });
+    return (
+      "Today is " +
+      monthName +
+      " (Northern-hemisphere " +
+      season +
+      "). Favour season-appropriate fabrics and layers — e.g. avoid heavy knitwear, corduroy, or wool " +
+      "overshirts in summer, and avoid linen or lightweight cotton alone in winter — unless the style notes " +
+      "below say otherwise."
+    );
+  }
+
+  function buildOutfitIdeasPrompt(wardrobeItems, exampleOutfits, profile, count, newItemCandidates, styleNotes) {
     const examples = exampleOutfits
       .map((o) => 'name: "' + o.name + '" — pieces: "' + o.pieces + '"')
       .join("\n");
@@ -274,10 +294,19 @@ const WardrobeGemini = (function () {
       examples,
       "",
       "Client: " + profile.build + ". Sizes: " + profile.sizes + ".",
-      "",
-      "Owned garments (freely combine these):",
-      garments,
+      getSeasonHint(new Date()),
     ];
+
+    if (styleNotes && styleNotes.trim()) {
+      lines.push(
+        "",
+        "Client's style notes (read carefully — these take priority over any other assumption, including the " +
+          "season hint above if they conflict): " +
+          styleNotes.trim()
+      );
+    }
+
+    lines.push("", "Owned garments (freely combine these):", garments);
 
     if (hasNewItems) {
       const newGarments = newItemCandidates.map((it) => "- " + it.name + " (£" + it.price + ")").join("\n");
@@ -323,8 +352,8 @@ const WardrobeGemini = (function () {
     if (!apiKey) {
       throw new GeminiError("Add a Gemini API key in Settings first.", "no-key");
     }
-    const { textModel } = getSettings();
-    const prompt = buildOutfitIdeasPrompt(wardrobeItems, exampleOutfits, profile, count, newItemCandidates);
+    const { textModel, styleNotes } = getSettings();
+    const prompt = buildOutfitIdeasPrompt(wardrobeItems, exampleOutfits, profile, count, newItemCandidates, styleNotes);
     const schema = buildOutfitSchema(newItemCandidates);
 
     const json = await callGenerateContent(textModel, apiKey, {

@@ -544,6 +544,7 @@
     const modelSelect = document.getElementById("gemini-model");
     const styleSelect = document.getElementById("gemini-style");
     const textModelInput = document.getElementById("gemini-text-model");
+    const styleNotesInput = document.getElementById("gemini-style-notes");
     const clearBtn = document.getElementById("settings-clear");
 
     WardrobeGemini.MODEL_OPTIONS.forEach((opt) => {
@@ -565,6 +566,7 @@
       modelSelect.value = settings.model;
       styleSelect.value = settings.style;
       textModelInput.value = settings.textModel;
+      styleNotesInput.value = settings.styleNotes;
     }
 
     function openModal() {
@@ -599,6 +601,7 @@
         model: modelSelect.value,
         style: styleSelect.value,
         textModel: textModelInput.value.trim() || WardrobeGemini.DEFAULT_SETTINGS.textModel,
+        styleNotes: styleNotesInput.value.trim(),
       });
       closeModal();
     });

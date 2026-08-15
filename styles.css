@@ -416,7 +416,9 @@ section.block h2 {
 
 #gemini-key,
 #gemini-model,
-#gemini-style {
+#gemini-style,
+#gemini-text-model,
+#gemini-style-notes {
   flex: 1;
   min-height: 44px;
   border: 1px solid var(--border);
@@ -426,6 +428,13 @@ section.block h2 {
   background: var(--bg);
   color: var(--charcoal);
   width: 100%;
+}
+
+#gemini-style-notes {
+  padding: 10px 12px;
+  font-family: inherit;
+  line-height: 1.4;
+  resize: vertical;
 }
 
 .ghost-btn {

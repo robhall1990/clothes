@@ -67,6 +67,18 @@
       <input type="text" id="gemini-text-model" autocomplete="off" spellcheck="false" placeholder="gemini-2.5-flash" />
       <p class="field-hint">Just the model id, e.g. <code>gemini-2.5-flash</code> — no "models/" prefix.</p>
 
+      <label class="field-label" for="gemini-style-notes">Style notes</label>
+      <textarea
+        id="gemini-style-notes"
+        rows="3"
+        placeholder="e.g. It's summer — prefer lighter fabrics, avoid heavy knitwear and corduroy for now"
+      ></textarea>
+      <p class="field-hint">
+        Fed into every outfit-idea generation (rotated outfits and Wardrobe tab ideas), alongside an
+        automatic seasonal hint based on today's date — use this to correct anything that keeps coming
+        up wrong, override the season hint, or steer fit/colour/formality preferences.
+      </p>
+
       <div class="modal-actions">
         <button type="button" id="settings-clear" class="ghost-btn">Remove key</button>
         <button type="submit" class="buy-btn">Save</button>
