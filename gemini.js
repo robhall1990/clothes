@@ -217,61 +217,104 @@ const WardrobeGemini = (function () {
     return dataUrl;
   }
 
-  const OUTFIT_SCHEMA = {
-    type: "ARRAY",
-    items: {
-      type: "OBJECT",
-      properties: {
-        name: { type: "STRING" },
-        pieces: { type: "STRING" },
-      },
-      required: ["name", "pieces"],
-      propertyOrdering: ["name", "pieces"],
-    },
-  };
+  // newItemCandidates, when given, is a non-empty array of {name, price} for
+  // items the wearer doesn't yet own. The schema's enum is the enforcement
+  // mechanism for "at most one new item per outfit, if any" — the model can
+  // literally only choose one of the provided names, or "", never invent one
+  // or list several.
+  function buildOutfitSchema(newItemCandidates) {
+    const properties = {
+      name: { type: "STRING" },
+      pieces: { type: "STRING" },
+    };
+    const required = ["name", "pieces"];
+    const propertyOrdering = ["name", "pieces"];
 
-  function buildOutfitIdeasPrompt(wardrobeItems, exampleOutfits, profile, count) {
+    if (newItemCandidates && newItemCandidates.length) {
+      properties.newItem = {
+        type: "STRING",
+        enum: newItemCandidates.map((it) => it.name).concat([""]),
+      };
+      required.push("newItem");
+      propertyOrdering.push("newItem");
+    }
+
+    return {
+      type: "ARRAY",
+      items: { type: "OBJECT", properties, required, propertyOrdering },
+    };
+  }
+
+  function buildOutfitIdeasPrompt(wardrobeItems, exampleOutfits, profile, count, newItemCandidates) {
     const examples = exampleOutfits
       .map((o) => 'name: "' + o.name + '" — pieces: "' + o.pieces + '"')
       .join("\n");
     const garments = wardrobeItems.map((it) => "- " + it.name + (it.notes ? " (" + it.notes + ")" : "")).join("\n");
+    const hasNewItems = !!(newItemCandidates && newItemCandidates.length);
 
-    return [
-      "You are a menswear stylist. Using ONLY the garments listed under \"Owned garments\" below, propose exactly " +
+    const lines = [
+      "You are a menswear stylist. Propose exactly " +
         count +
         " outfit combinations, in the exact same style as these existing examples:",
       examples,
       "",
       "Client: " + profile.build + ". Sizes: " + profile.sizes + ".",
       "",
-      "Owned garments:",
+      "Owned garments (freely combine these):",
       garments,
+    ];
+
+    if (hasNewItems) {
+      const newGarments = newItemCandidates.map((it) => "- " + it.name + " (£" + it.price + ")").join("\n");
+      lines.push(
+        "",
+        "Also available to buy, not yet owned (optional — use at most ONE of these per outfit, only when it " +
+          "clearly completes the look; many outfits should use none of them):",
+        newGarments
+      );
+    }
+
+    lines.push(
       "",
       "Rules:",
-      '1. Use only garments from the "Owned garments" list, referenced by a short recognisable version of their name (drop the brand if you like, keep the distinguishing detail, e.g. colour).',
+      '1. Use only garments from the lists above, referenced by a short recognisable version of their name (drop the brand if you like, keep the distinguishing detail, e.g. colour).',
       "2. Never invent a garment that isn't listed.",
       "3. Each outfit uses 2 to 5 garments and must be genuinely wearable together — matching formality, sensible for the same season, no obvious clashes.",
-      "4. Spread garments across the outfits rather than reusing the same one or two items every time; use as much of the wardrobe as sensibly possible.",
+      "4. Spread garments across the outfits rather than reusing the same one or two items every time; use as much of the owned wardrobe as sensibly possible.",
       '5. Each outfit "name" is short (2-5 words) and specific to a moment or context, exactly like the examples above — never generic like "Outfit 1" or "Casual look".',
-      '6. Each outfit "pieces" string lists the garments joined with " + ", in the order worn outside-in, with an optional short styling note in parentheses (e.g. "(open)", "(tucked)", "(collar out)") — match the tone of the examples exactly.',
-      "7. Return exactly " + count + " outfits — no more, no fewer.",
-      "8. Respond with JSON only, matching the given schema. No commentary, no markdown fences.",
-    ].join("\n");
+      '6. Each outfit "pieces" string lists the garments joined with " + ", in the order worn outside-in, with an optional short styling note in parentheses (e.g. "(open)", "(tucked)", "(collar out)") — match the tone of the examples exactly.'
+    );
+
+    if (hasNewItems) {
+      lines.push(
+        '7. If an outfit uses one of the "not yet owned" garments, its exact name (copied verbatim from that list) goes in the "newItem" field, and that garment must also appear in "pieces" like any other item. If an outfit uses none of them, set "newItem" to "". Never use more than one not-yet-owned garment in a single outfit.',
+        "8. Return exactly " + count + " outfits — no more, no fewer.",
+        "9. Respond with JSON only, matching the given schema. No commentary, no markdown fences."
+      );
+    } else {
+      lines.push(
+        "7. Return exactly " + count + " outfits — no more, no fewer.",
+        "8. Respond with JSON only, matching the given schema. No commentary, no markdown fences."
+      );
+    }
+
+    return lines.join("\n");
   }
 
-  async function generateOutfitIdeas({ wardrobeItems, exampleOutfits, profile, count }) {
+  async function generateOutfitIdeas({ wardrobeItems, exampleOutfits, profile, count, newItemCandidates }) {
     const apiKey = getApiKey();
     if (!apiKey) {
       throw new GeminiError("Add a Gemini API key in Settings first.", "no-key");
     }
     const { textModel } = getSettings();
-    const prompt = buildOutfitIdeasPrompt(wardrobeItems, exampleOutfits, profile, count);
+    const prompt = buildOutfitIdeasPrompt(wardrobeItems, exampleOutfits, profile, count, newItemCandidates);
+    const schema = buildOutfitSchema(newItemCandidates);
 
     const json = await callGenerateContent(textModel, apiKey, {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         responseMimeType: "application/json",
-        responseSchema: OUTFIT_SCHEMA,
+        responseSchema: schema,
         temperature: 0.9,
       },
     });
@@ -294,7 +337,12 @@ const WardrobeGemini = (function () {
 
     return parsed
       .filter((o) => o && typeof o.name === "string" && typeof o.pieces === "string")
-      .map((o, i) => ({ id: "gen-" + Date.now() + "-" + i, name: o.name.trim(), pieces: o.pieces.trim() }));
+      .map((o, i) => ({
+        id: "gen-" + Date.now() + "-" + i,
+        name: o.name.trim(),
+        pieces: o.pieces.trim(),
+        newItem: typeof o.newItem === "string" ? o.newItem.trim() : "",
+      }));
   }
 
   return {
