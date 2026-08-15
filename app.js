@@ -22,6 +22,49 @@
 
   let boughtState = loadBought();
 
+  const OWNED_ITEMS_KEY = "wardrobe-capsule-owned-items-v1";
+  const GENERATED_OUTFITS_KEY = "wardrobe-capsule-generated-outfits-v1";
+
+  function loadJson(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  function saveJson(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (e) {
+      /* localStorage unavailable — state just won't persist */
+    }
+  }
+
+  let ownedItems = loadJson(OWNED_ITEMS_KEY, []);
+  let generatedOutfits = loadJson(GENERATED_OUTFITS_KEY, []);
+
+  const CATEGORY_OPTIONS = [
+    "Outerwear",
+    "Knitwear",
+    "Tops & shirts",
+    "Trousers & denim",
+    "Footwear",
+    "Accessories",
+    "Other",
+  ];
+
+  function guessCategory(name) {
+    const n = name.toLowerCase();
+    if (/\b(boot|derby|loafer|shoe|trainer|sneaker)/.test(n)) return "Footwear";
+    if (/\b(jean|trouser|chino|denim)/.test(n)) return "Trousers & denim";
+    if (/\b(jumper|knit|polo|turtleneck|sweater|cardigan)/.test(n)) return "Knitwear";
+    if (/\b(overshirt|blazer|jacket|coat|suit)/.test(n)) return "Outerwear";
+    if (/\b(shirt|tee|t-shirt|top)/.test(n)) return "Tops & shirts";
+    return "Other";
+  }
+
   const money = (n) => "£" + n.toFixed(0);
 
   function buyLink(item, extraClass) {
@@ -173,6 +216,253 @@
     });
   }
 
+  function renderWardrobePanel(data) {
+    const panel = document.createElement("div");
+    panel.className = "panel";
+    panel.id = "panel-wardrobe";
+    panel.setAttribute("role", "tabpanel");
+
+    const addSection = document.createElement("section");
+    addSection.className = "block";
+    const addH2 = document.createElement("h2");
+    addH2.textContent = "Add an item";
+    addSection.appendChild(addH2);
+
+    const form = document.createElement("form");
+    form.className = "add-item-form";
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.required = true;
+    nameInput.placeholder = "e.g. Navy suit jacket";
+    nameInput.setAttribute("aria-label", "Item name");
+
+    const categorySelect = document.createElement("select");
+    categorySelect.setAttribute("aria-label", "Category");
+    CATEGORY_OPTIONS.forEach((c) => {
+      const opt = document.createElement("option");
+      opt.value = c;
+      opt.textContent = c;
+      categorySelect.appendChild(opt);
+    });
+
+    const notesInput = document.createElement("input");
+    notesInput.type = "text";
+    notesInput.placeholder = "Notes, optional (colour, fit…)";
+    notesInput.setAttribute("aria-label", "Notes");
+
+    const addBtn = document.createElement("button");
+    addBtn.type = "submit";
+    addBtn.className = "buy-btn full-width";
+    addBtn.textContent = "Add to wardrobe";
+
+    form.appendChild(nameInput);
+    form.appendChild(categorySelect);
+    form.appendChild(notesInput);
+    form.appendChild(addBtn);
+    addSection.appendChild(form);
+
+    const importBtn = document.createElement("button");
+    importBtn.type = "button";
+    importBtn.className = "ghost-btn full-width import-btn";
+    importBtn.textContent = "Import bought items from shopping list";
+    addSection.appendChild(importBtn);
+
+    const listSection = document.createElement("section");
+    listSection.className = "block";
+    const listH2 = document.createElement("h2");
+    listSection.appendChild(listH2);
+    const listEl = document.createElement("div");
+    listSection.appendChild(listEl);
+
+    const ideasSection = document.createElement("section");
+    ideasSection.className = "block";
+    const ideasH2 = document.createElement("h2");
+    ideasH2.textContent = "Outfit ideas from your wardrobe";
+    ideasSection.appendChild(ideasH2);
+    const ideasIntro = document.createElement("p");
+    ideasIntro.className = "empty-note";
+    ideasSection.appendChild(ideasIntro);
+    const generateBtn = document.createElement("button");
+    generateBtn.type = "button";
+    generateBtn.className = "generate-btn full-width";
+    ideasSection.appendChild(generateBtn);
+    const ideasStatus = document.createElement("p");
+    ideasStatus.className = "generate-status";
+    ideasStatus.hidden = true;
+    ideasSection.appendChild(ideasStatus);
+    const ideasList = document.createElement("div");
+    ideasSection.appendChild(ideasList);
+
+    panel.appendChild(addSection);
+    panel.appendChild(listSection);
+    panel.appendChild(ideasSection);
+
+    function renderItemList() {
+      listH2.textContent = "My wardrobe (" + ownedItems.length + (ownedItems.length === 1 ? " item" : " items") + ")";
+      listEl.innerHTML = "";
+      if (ownedItems.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "empty-note";
+        empty.textContent = "Nothing logged yet — add items above, or import what you've already bought.";
+        listEl.appendChild(empty);
+        return;
+      }
+      const byCategory = new Map();
+      ownedItems.forEach((it) => {
+        const cat = it.category || "Other";
+        if (!byCategory.has(cat)) byCategory.set(cat, []);
+        byCategory.get(cat).push(it);
+      });
+      CATEGORY_OPTIONS.forEach((cat) => {
+        const items = byCategory.get(cat);
+        if (!items || items.length === 0) return;
+        const groupHeading = document.createElement("p");
+        groupHeading.className = "category-heading";
+        groupHeading.textContent = cat;
+        listEl.appendChild(groupHeading);
+        items.forEach((it) => {
+          const row = document.createElement("div");
+          row.className = "wardrobe-item-row";
+          const info = document.createElement("div");
+          info.className = "item-info";
+          const nameEl = document.createElement("p");
+          nameEl.className = "item-name";
+          nameEl.textContent = it.name;
+          info.appendChild(nameEl);
+          if (it.notes) {
+            const notesEl = document.createElement("p");
+            notesEl.className = "item-meta";
+            notesEl.textContent = it.notes;
+            info.appendChild(notesEl);
+          }
+          const removeBtn = document.createElement("button");
+          removeBtn.type = "button";
+          removeBtn.className = "remove-btn";
+          removeBtn.setAttribute("aria-label", "Remove " + it.name);
+          removeBtn.textContent = "✕";
+          removeBtn.addEventListener("click", () => {
+            ownedItems = ownedItems.filter((x) => x.id !== it.id);
+            saveJson(OWNED_ITEMS_KEY, ownedItems);
+            renderItemList();
+            renderIdeasIntro();
+          });
+          row.appendChild(info);
+          row.appendChild(removeBtn);
+          listEl.appendChild(row);
+        });
+      });
+    }
+
+    function renderIdeasIntro() {
+      if (ownedItems.length < 3) {
+        ideasIntro.textContent = "Log at least 3 items to generate outfit ideas.";
+        generateBtn.hidden = true;
+      } else {
+        ideasIntro.textContent =
+          "Gemini will combine what's above into new outfit ideas, styled like the suggestions in the other tabs.";
+        generateBtn.hidden = false;
+      }
+    }
+
+    function renderGeneratedOutfits() {
+      ideasList.innerHTML = "";
+      generateBtn.textContent = generatedOutfits.length ? "Regenerate outfit ideas" : "Generate outfit ideas";
+      generatedOutfits.forEach((outfit) => {
+        const card = document.createElement("div");
+        card.className = "outfit-card";
+        const name = document.createElement("p");
+        name.className = "outfit-name";
+        name.textContent = outfit.name;
+        const pieces = document.createElement("p");
+        pieces.className = "outfit-pieces";
+        pieces.textContent = outfit.pieces;
+        card.appendChild(name);
+        card.appendChild(pieces);
+
+        const imageWrap = document.createElement("div");
+        imageWrap.className = "outfit-image-wrap";
+        card.appendChild(imageWrap);
+        mountOutfitImage(imageWrap, "Wardrobe", outfit);
+
+        ideasList.appendChild(card);
+      });
+    }
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const name = nameInput.value.trim();
+      if (!name) return;
+      ownedItems.push({
+        id: "item-" + Date.now() + "-" + Math.round(Math.random() * 1e6),
+        name,
+        category: categorySelect.value,
+        notes: notesInput.value.trim(),
+      });
+      saveJson(OWNED_ITEMS_KEY, ownedItems);
+      nameInput.value = "";
+      notesInput.value = "";
+      renderItemList();
+      renderIdeasIntro();
+    });
+
+    importBtn.addEventListener("click", () => {
+      const itemMap = allItemsByName(data);
+      let added = 0;
+      itemMap.forEach((item, name) => {
+        if (!boughtState[name]) return;
+        if (ownedItems.some((it) => it.name === name)) return;
+        added++;
+        ownedItems.push({
+          id: "item-" + Date.now() + "-" + Math.round(Math.random() * 1e6) + "-" + added,
+          name,
+          category: guessCategory(name),
+          notes: "",
+        });
+      });
+      if (added > 0) {
+        saveJson(OWNED_ITEMS_KEY, ownedItems);
+        renderItemList();
+        renderIdeasIntro();
+      }
+    });
+
+    generateBtn.addEventListener("click", async () => {
+      generateBtn.disabled = true;
+      ideasStatus.hidden = false;
+      ideasStatus.classList.remove("generate-error");
+      ideasStatus.textContent = "Asking Gemini for outfit ideas…";
+
+      const allOutfits = data.capsules.flatMap((c) => c.outfits);
+      const exampleOutfits = allOutfits.slice(0, 3);
+      const count = Math.max(3, Math.min(6, Math.round(ownedItems.length / 2)));
+
+      try {
+        const outfits = await WardrobeGemini.generateOutfitIdeas({
+          wardrobeItems: ownedItems,
+          exampleOutfits,
+          profile: data.profile,
+          count,
+        });
+        generatedOutfits = outfits;
+        saveJson(GENERATED_OUTFITS_KEY, generatedOutfits);
+        ideasStatus.hidden = true;
+        renderGeneratedOutfits();
+      } catch (err) {
+        ideasStatus.hidden = false;
+        ideasStatus.classList.add("generate-error");
+        ideasStatus.textContent = err && err.message ? err.message : "Something went wrong generating outfit ideas.";
+      } finally {
+        generateBtn.disabled = false;
+      }
+    });
+
+    renderItemList();
+    renderIdeasIntro();
+    renderGeneratedOutfits();
+
+    return panel;
+  }
+
   function initSettingsModal() {
     if (typeof WardrobeGemini === "undefined") return;
 
@@ -184,6 +474,7 @@
     const visToggle = document.getElementById("key-visibility-toggle");
     const modelSelect = document.getElementById("gemini-model");
     const styleSelect = document.getElementById("gemini-style");
+    const textModelInput = document.getElementById("gemini-text-model");
     const clearBtn = document.getElementById("settings-clear");
 
     WardrobeGemini.MODEL_OPTIONS.forEach((opt) => {
@@ -204,6 +495,7 @@
       const settings = WardrobeGemini.getSettings();
       modelSelect.value = settings.model;
       styleSelect.value = settings.style;
+      textModelInput.value = settings.textModel;
     }
 
     function openModal() {
@@ -234,7 +526,11 @@
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       WardrobeGemini.setApiKey(keyInput.value.trim());
-      WardrobeGemini.setSettings({ model: modelSelect.value, style: styleSelect.value });
+      WardrobeGemini.setSettings({
+        model: modelSelect.value,
+        style: styleSelect.value,
+        textModel: textModelInput.value.trim() || WardrobeGemini.DEFAULT_SETTINGS.textModel,
+      });
       closeModal();
     });
   }
@@ -399,12 +695,17 @@
       main.appendChild(renderCapsulePanel(capsule));
     });
 
+    main.appendChild(renderWardrobePanel(data));
+
     const { panel: shoppingPanel } = renderShoppingPanel(data);
     main.appendChild(shoppingPanel);
 
     const tabNames = data.capsules
       .map((c) => ({ id: "panel-" + c.name.toLowerCase(), label: c.name }))
-      .concat([{ id: "panel-shopping", label: "Shopping list" }]);
+      .concat([
+        { id: "panel-wardrobe", label: "Wardrobe" },
+        { id: "panel-shopping", label: "Shopping" },
+      ]);
 
     initTabs(tabNames);
     activateTab(tabNames[0].id);

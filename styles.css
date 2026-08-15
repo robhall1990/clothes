@@ -578,6 +578,90 @@ nav.tab-bar button.active .dot {
   padding: 8px 0;
 }
 
+/* Wardrobe tab */
+
+.add-item-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.add-item-form input,
+.add-item-form select {
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 0.9rem;
+  background: var(--surface);
+  color: var(--charcoal);
+}
+
+.full-width {
+  width: 100%;
+}
+
+.import-btn {
+  margin-top: 4px;
+}
+
+.category-heading {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--charcoal-faint);
+  font-weight: 700;
+  margin: 16px 0 8px;
+}
+
+.category-heading:first-child {
+  margin-top: 0;
+}
+
+.wardrobe-item-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 12px 12px 16px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wardrobe-item-row .item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.wardrobe-item-row .item-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0 0 2px;
+}
+
+.wardrobe-item-row .item-meta {
+  font-size: 0.82rem;
+  color: var(--charcoal-soft);
+  margin: 0;
+}
+
+.remove-btn {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: none;
+  color: var(--charcoal-faint);
+  font-size: 1rem;
+  border-radius: 8px;
+}
+
+.remove-btn:active {
+  background: var(--bg);
+}
+
 @media (min-width: 600px) {
   nav.tab-bar {
     max-width: 560px;
