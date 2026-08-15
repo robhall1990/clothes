@@ -29,7 +29,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # enablement lets the action switch Pages to the "GitHub Actions" build
+      # type itself. Without it the first run fails on a repo still set to
+      # "Deploy from a branch", because there's no Actions-based Pages site to
+      # configure yet.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       # The site is plain static files with no build step, so the repo root is
       # the artifact. Jekyll would otherwise ignore files and folders starting
