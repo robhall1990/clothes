@@ -145,16 +145,26 @@ const WardrobeGemini = (function () {
     }
   }
 
+  // Strips an accidental "models/" prefix — easy to paste in from Google's
+  // own docs, which usually show the fully-qualified "models/gemini-x" form,
+  // but our URL already supplies that prefix. Left in, it doubles up into
+  // ".../models/models/gemini-x" and Gemini rejects it as a malformed model
+  // name rather than a 404, which reads confusingly.
+  function normalizeModelId(id) {
+    return (id || "").trim().replace(/^models\//i, "");
+  }
+
   // Shared call to a generateContent endpoint. Requires an API key to already
   // be present (callers check that first so they can show a targeted message).
   async function callGenerateContent(model, apiKey, body) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 45000);
+    const cleanModel = normalizeModelId(model);
 
     let res;
     try {
       res = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent",
+        "https://generativelanguage.googleapis.com/v1beta/models/" + cleanModel + ":generateContent",
         {
           method: "POST",
           headers: {
@@ -217,11 +227,16 @@ const WardrobeGemini = (function () {
     return dataUrl;
   }
 
+  // Gemini's structured-output enum rejects empty-string values, so "no new
+  // item" needs a real sentinel word rather than "" — chosen to never
+  // collide with an actual garment name.
+  const NO_NEW_ITEM = "None";
+
   // newItemCandidates, when given, is a non-empty array of {name, price} for
   // items the wearer doesn't yet own. The schema's enum is the enforcement
   // mechanism for "at most one new item per outfit, if any" — the model can
-  // literally only choose one of the provided names, or "", never invent one
-  // or list several.
+  // literally only choose one of the provided names, or NO_NEW_ITEM, never
+  // invent one or list several.
   function buildOutfitSchema(newItemCandidates) {
     const properties = {
       name: { type: "STRING" },
@@ -233,7 +248,7 @@ const WardrobeGemini = (function () {
     if (newItemCandidates && newItemCandidates.length) {
       properties.newItem = {
         type: "STRING",
-        enum: newItemCandidates.map((it) => it.name).concat([""]),
+        enum: newItemCandidates.map((it) => it.name).concat([NO_NEW_ITEM]),
       };
       required.push("newItem");
       propertyOrdering.push("newItem");
@@ -287,7 +302,9 @@ const WardrobeGemini = (function () {
 
     if (hasNewItems) {
       lines.push(
-        '7. If an outfit uses one of the "not yet owned" garments, its exact name (copied verbatim from that list) goes in the "newItem" field, and that garment must also appear in "pieces" like any other item. If an outfit uses none of them, set "newItem" to "". Never use more than one not-yet-owned garment in a single outfit.',
+        '7. If an outfit uses one of the "not yet owned" garments, its exact name (copied verbatim from that list) goes in the "newItem" field, and that garment must also appear in "pieces" like any other item. If an outfit uses none of them, set "newItem" to "' +
+          NO_NEW_ITEM +
+          '". Never use more than one not-yet-owned garment in a single outfit.',
         "8. Return exactly " + count + " outfits — no more, no fewer.",
         "9. Respond with JSON only, matching the given schema. No commentary, no markdown fences."
       );
@@ -337,12 +354,15 @@ const WardrobeGemini = (function () {
 
     return parsed
       .filter((o) => o && typeof o.name === "string" && typeof o.pieces === "string")
-      .map((o, i) => ({
-        id: "gen-" + Date.now() + "-" + i,
-        name: o.name.trim(),
-        pieces: o.pieces.trim(),
-        newItem: typeof o.newItem === "string" ? o.newItem.trim() : "",
-      }));
+      .map((o, i) => {
+        const newItem = typeof o.newItem === "string" ? o.newItem.trim() : "";
+        return {
+          id: "gen-" + Date.now() + "-" + i,
+          name: o.name.trim(),
+          pieces: o.pieces.trim(),
+          newItem: newItem === NO_NEW_ITEM ? "" : newItem,
+        };
+      });
   }
 
   return {
