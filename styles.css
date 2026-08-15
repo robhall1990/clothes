@@ -197,6 +197,17 @@ section.block h2 {
   background: var(--clay-dark);
 }
 
+.buy-btn-secondary {
+  background: transparent;
+  color: var(--charcoal-soft);
+  border: 1px solid var(--border);
+}
+
+.buy-btn-secondary:active {
+  background: var(--bg);
+  color: var(--charcoal);
+}
+
 .outfit-card {
   background: var(--surface);
   border: 1px solid var(--border);
