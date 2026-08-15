@@ -1,0 +1,45 @@
+name: Deploy to GitHub Pages
+
+# Replaces the legacy branch-based ("dynamic") Pages build. That path only
+# ever published whichever branch was named in Settings, so merges to main
+# didn't deploy, and its runs couldn't be re-run or cancelled when they stalled.
+# A real workflow deploys on every push to main and can be re-run like any other.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # lets a stuck or skipped deploy be re-triggered by hand
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time. Queued runs collapse to the newest, so a burst of
+# merges can't pile up — but an in-flight deploy is left to finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      # The site is plain static files with no build step, so the repo root is
+      # the artifact. Jekyll would otherwise ignore files and folders starting
+      # with an underscore; .nojekyll turns that off.
+      - name: Disable Jekyll processing
+        run: touch .nojekyll
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: .
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
