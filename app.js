@@ -84,7 +84,7 @@
     const onGenerate = async () => {
       renderOutfitImageState(wrap, "loading");
       try {
-        const dataUrl = await WardrobeGemini.generateOutfitImage(capsuleName, outfit, D.profile);
+        const dataUrl = await WardrobeGemini.generateOutfitImage(capsuleName, outfit, S.getProfile());
         renderOutfitImageState(wrap, "image", { dataUrl, alt: outfit.name + " outfit", onGenerate });
       } catch (e) {
         renderOutfitImageState(wrap, "error", {
@@ -135,9 +135,38 @@
   }
 
   function buildFeedbackRow(outfit, onChange) {
+    const wrap = el("div", "feedback-wrap");
     const row = el("div", "feedback-row");
-    const label = el("span", "feedback-label", "Rate this:");
-    row.appendChild(label);
+    row.appendChild(el("span", "feedback-label", "Rate this:"));
+
+    // Shown only after a thumbs-down. "Why" turns a bare rejection into a
+    // standing preference the next generation can actually act on.
+    const reasons = el("div", "reason-chips");
+    reasons.hidden = true;
+
+    function syncReasons() {
+      const verdict = S.getFeedbackVerdict(outfit.name);
+      reasons.hidden = verdict !== "down";
+      const chosen = S.getFeedbackReason(outfit.name);
+      reasons.querySelectorAll(".reason-chip").forEach((chip) => {
+        const active = chip.dataset.reason === chosen;
+        chip.classList.toggle("active", active);
+        chip.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+    }
+
+    S.FEEDBACK_REASONS.forEach((reason) => {
+      const chip = el("button", "reason-chip", reason);
+      chip.type = "button";
+      chip.dataset.reason = reason;
+      chip.addEventListener("click", () => {
+        const current = S.getFeedbackReason(outfit.name);
+        S.setOutfitFeedback(outfit.name, "down", current === reason ? "" : reason);
+        syncReasons();
+        if (onChange) onChange();
+      });
+      reasons.appendChild(chip);
+    });
 
     const mk = (verdict, glyph, aria) => {
       const btn = el("button", "feedback-btn", glyph);
@@ -152,6 +181,7 @@
         const current = S.getFeedbackVerdict(outfit.name);
         S.setOutfitFeedback(outfit.name, current === verdict ? null : verdict);
         row.querySelectorAll(".feedback-btn").forEach((b) => b._sync && b._sync());
+        syncReasons();
         if (onChange) onChange();
       });
       btn._sync = sync;
@@ -166,7 +196,11 @@
     if (wears > 0) {
       row.appendChild(el("span", "wear-count", "worn " + wears + (wears === 1 ? " time" : " times")));
     }
-    return row;
+
+    wrap.appendChild(row);
+    wrap.appendChild(reasons);
+    syncReasons();
+    return wrap;
   }
 
   // opts: { showImage, showFeedback, onChange }
@@ -487,7 +521,7 @@
         const outfits = await WardrobeGemini.generateOutfitIdeas({
           wardrobeItems: pool,
           exampleOutfits: capsule.outfits,
-          profile: D.profile,
+          profile: S.getProfile(),
           count: capsule.outfits.length,
           newItemCandidates,
           weather: currentWeather,
@@ -805,7 +839,7 @@
         const outfits = await WardrobeGemini.generateOutfitIdeas({
           wardrobeItems: pool,
           exampleOutfits,
-          profile: D.profile,
+          profile: S.getProfile(),
           count,
           newItemCandidates,
           weather: currentWeather,
@@ -933,6 +967,60 @@
     D.capsules.forEach((c) => refreshPanel("panel-" + c.name.toLowerCase()));
   }
 
+  /* ---------------- profile ---------------- */
+
+  // Build and sizes are the most personal input to every prompt, so they're
+  // editable here rather than baked into data.js.
+  function initProfileStrip() {
+    const body = document.getElementById("profile-body");
+    const editWrap = document.getElementById("profile-edit");
+    const buildInput = document.getElementById("profile-build");
+    const sizesInput = document.getElementById("profile-sizes");
+    const editBtn = document.getElementById("profile-edit-btn");
+    const saveBtn = document.getElementById("profile-save");
+    const cancelBtn = document.getElementById("profile-cancel");
+    const resetBtn = document.getElementById("profile-reset");
+
+    function renderSummary() {
+      const p = S.getProfile();
+      body.textContent = p.build + ". " + p.sizes + ".";
+      resetBtn.hidden = !S.isProfileCustomised();
+    }
+
+    function openEditor() {
+      const p = S.getProfile();
+      buildInput.value = p.build;
+      sizesInput.value = p.sizes;
+      editWrap.hidden = false;
+      body.hidden = true;
+      editBtn.hidden = true;
+      buildInput.focus();
+    }
+
+    function closeEditor() {
+      editWrap.hidden = true;
+      body.hidden = false;
+      editBtn.hidden = false;
+      renderSummary();
+    }
+
+    editBtn.addEventListener("click", openEditor);
+    cancelBtn.addEventListener("click", closeEditor);
+
+    saveBtn.addEventListener("click", () => {
+      S.setProfile({ build: buildInput.value.trim(), sizes: sizesInput.value.trim() });
+      closeEditor();
+    });
+
+    resetBtn.addEventListener("click", () => {
+      S.resetProfile();
+      renderSummary();
+      if (!editWrap.hidden) openEditor();
+    });
+
+    renderSummary();
+  }
+
   /* ---------------- settings ---------------- */
 
   function initSettingsModal() {
@@ -1053,7 +1141,7 @@
     initTabs(tabs);
     activateTab("panel-today");
 
-    document.getElementById("profile-body").textContent = D.profile.build + ". " + D.profile.sizes + ".";
+    initProfileStrip();
     initSettingsModal();
 
     // Weather is best-effort and asks for location, so it runs after first
