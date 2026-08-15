@@ -122,8 +122,10 @@ const WardrobeGemini = (function () {
         profile.build +
         ". He is wearing: " +
         outfit.pieces +
-        ". Natural studio lighting, neutral warm-grey background, realistic photography, " +
-        "well-fitted slim-to-straight cut clothing, no visible face, no text or logos, no watermark."
+        ". Full-body shot, standing directly facing the camera, arms relaxed by his sides so every " +
+        "garment is fully visible and unobscured — nothing cropped out, nothing tucked behind the body " +
+        "or hidden by folded arms. Natural studio lighting, neutral warm-grey background, realistic " +
+        "photography, well-fitted slim-to-straight cut clothing, no visible face, no text or logos, no watermark."
       );
     }
     return (
