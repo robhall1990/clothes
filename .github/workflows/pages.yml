@@ -27,7 +27,12 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # Always publish main, even when dispatched manually from another
+      # branch — "deploy the site" should never mean "deploy whatever branch
+      # happened to be selected in the dropdown".
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       # enablement lets the action switch Pages to the "GitHub Actions" build
       # type itself. Without it the first run fails on a repo still set to
@@ -42,6 +47,18 @@ jobs:
       # with an underscore; .nojekyll turns that off.
       - name: Disable Jekyll processing
         run: touch .nojekyll
+
+      # Assets are referenced as "app.js?v=dev" in the repo; stamping the
+      # commit sha here means every deploy requests different URLs, so a
+      # browser holding an old copy can't serve stale JS or CSS alongside a
+      # freshly fetched index.html. Without this, adding a new script file
+      # is invisible until the cached HTML happens to expire.
+      - name: Cache-bust assets with the deployed commit
+        run: |
+          sha="${GITHUB_SHA:0:8}"
+          sed -i "s/?v=dev/?v=$sha/g" index.html
+          echo "Stamped asset URLs with ?v=$sha"
+          grep -o 'src="[^"]*?v=[^"]*"' index.html
 
       - uses: actions/upload-pages-artifact@v4
         with:
