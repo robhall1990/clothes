@@ -1048,3 +1048,11 @@ nav.tab-bar button.active .dot {
   border-color: var(--clay);
   color: #fff;
 }
+
+.build-stamp {
+  font-size: 0.68rem;
+  color: var(--charcoal-faint);
+  margin: 10px 0 4px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
