@@ -16,6 +16,7 @@ const WardrobeGemini = (function () {
   const DEFAULT_SETTINGS = {
     model: "gemini-2.5-flash-image",
     style: "flat-lay",
+    textModel: "gemini-2.5-flash",
   };
 
   const MODEL_OPTIONS = [
@@ -144,14 +145,9 @@ const WardrobeGemini = (function () {
     }
   }
 
-  async function generateOutfitImage(capsuleName, outfit, profile) {
-    const apiKey = getApiKey();
-    if (!apiKey) {
-      throw new GeminiError("Add a Gemini API key in Settings first.", "no-key");
-    }
-    const { model, style } = getSettings();
-    const prompt = buildPrompt(capsuleName, outfit, profile, style);
-
+  // Shared call to a generateContent endpoint. Requires an API key to already
+  // be present (callers check that first so they can show a targeted message).
+  async function callGenerateContent(model, apiKey, body) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 45000);
 
@@ -165,13 +161,7 @@ const WardrobeGemini = (function () {
             "Content-Type": "application/json",
             "x-goog-api-key": apiKey,
           },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              responseModalities: ["TEXT", "IMAGE"],
-              imageConfig: { aspectRatio: "4:5" },
-            },
-          }),
+          body: JSON.stringify(body),
           signal: controller.signal,
         }
       );
@@ -187,8 +177,8 @@ const WardrobeGemini = (function () {
     if (!res.ok) {
       let message = "Gemini request failed (" + res.status + ").";
       try {
-        const body = await res.json();
-        if (body && body.error && body.error.message) message = body.error.message;
+        const errBody = await res.json();
+        if (errBody && errBody.error && errBody.error.message) message = errBody.error.message;
       } catch (e) {
         /* ignore parse failure, use default message */
       }
@@ -196,7 +186,25 @@ const WardrobeGemini = (function () {
       throw new GeminiError(message, kind);
     }
 
-    const json = await res.json();
+    return res.json();
+  }
+
+  async function generateOutfitImage(capsuleName, outfit, profile) {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      throw new GeminiError("Add a Gemini API key in Settings first.", "no-key");
+    }
+    const { model, style } = getSettings();
+    const prompt = buildPrompt(capsuleName, outfit, profile, style);
+
+    const json = await callGenerateContent(model, apiKey, {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseModalities: ["TEXT", "IMAGE"],
+        imageConfig: { aspectRatio: "4:5" },
+      },
+    });
+
     const parts = json?.candidates?.[0]?.content?.parts || [];
     const imagePart = parts.find((p) => p.inlineData && p.inlineData.data);
     if (!imagePart) {
@@ -207,6 +215,86 @@ const WardrobeGemini = (function () {
 
     await setCachedImage(outfitKey(capsuleName, outfit.name), dataUrl, { model, style });
     return dataUrl;
+  }
+
+  const OUTFIT_SCHEMA = {
+    type: "ARRAY",
+    items: {
+      type: "OBJECT",
+      properties: {
+        name: { type: "STRING" },
+        pieces: { type: "STRING" },
+      },
+      required: ["name", "pieces"],
+      propertyOrdering: ["name", "pieces"],
+    },
+  };
+
+  function buildOutfitIdeasPrompt(wardrobeItems, exampleOutfits, profile, count) {
+    const examples = exampleOutfits
+      .map((o) => 'name: "' + o.name + '" — pieces: "' + o.pieces + '"')
+      .join("\n");
+    const garments = wardrobeItems.map((it) => "- " + it.name + (it.notes ? " (" + it.notes + ")" : "")).join("\n");
+
+    return [
+      "You are a menswear stylist. Using ONLY the garments listed under \"Owned garments\" below, propose exactly " +
+        count +
+        " outfit combinations, in the exact same style as these existing examples:",
+      examples,
+      "",
+      "Client: " + profile.build + ". Sizes: " + profile.sizes + ".",
+      "",
+      "Owned garments:",
+      garments,
+      "",
+      "Rules:",
+      '1. Use only garments from the "Owned garments" list, referenced by a short recognisable version of their name (drop the brand if you like, keep the distinguishing detail, e.g. colour).',
+      "2. Never invent a garment that isn't listed.",
+      "3. Each outfit uses 2 to 5 garments and must be genuinely wearable together — matching formality, sensible for the same season, no obvious clashes.",
+      "4. Spread garments across the outfits rather than reusing the same one or two items every time; use as much of the wardrobe as sensibly possible.",
+      '5. Each outfit "name" is short (2-5 words) and specific to a moment or context, exactly like the examples above — never generic like "Outfit 1" or "Casual look".',
+      '6. Each outfit "pieces" string lists the garments joined with " + ", in the order worn outside-in, with an optional short styling note in parentheses (e.g. "(open)", "(tucked)", "(collar out)") — match the tone of the examples exactly.',
+      "7. Return exactly " + count + " outfits — no more, no fewer.",
+      "8. Respond with JSON only, matching the given schema. No commentary, no markdown fences.",
+    ].join("\n");
+  }
+
+  async function generateOutfitIdeas({ wardrobeItems, exampleOutfits, profile, count }) {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      throw new GeminiError("Add a Gemini API key in Settings first.", "no-key");
+    }
+    const { textModel } = getSettings();
+    const prompt = buildOutfitIdeasPrompt(wardrobeItems, exampleOutfits, profile, count);
+
+    const json = await callGenerateContent(textModel, apiKey, {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: OUTFIT_SCHEMA,
+        temperature: 0.9,
+      },
+    });
+
+    const parts = json?.candidates?.[0]?.content?.parts || [];
+    const textPart = parts.find((p) => typeof p.text === "string");
+    if (!textPart) {
+      throw new GeminiError("Gemini didn't return any outfit ideas.", "no-image");
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(textPart.text);
+    } catch (e) {
+      throw new GeminiError("Gemini's response wasn't valid JSON.", "bad-response");
+    }
+    if (!Array.isArray(parsed)) {
+      throw new GeminiError("Gemini's response wasn't in the expected format.", "bad-response");
+    }
+
+    return parsed
+      .filter((o) => o && typeof o.name === "string" && typeof o.pieces === "string")
+      .map((o, i) => ({ id: "gen-" + Date.now() + "-" + i, name: o.name.trim(), pieces: o.pieces.trim() }));
   }
 
   return {
@@ -220,6 +308,7 @@ const WardrobeGemini = (function () {
     outfitKey,
     getCachedImage,
     generateOutfitImage,
+    generateOutfitIdeas,
     GeminiError,
   };
 })();
