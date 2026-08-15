@@ -118,31 +118,49 @@
     panel.id = "panel-" + capsule.name.toLowerCase();
     panel.setAttribute("role", "tabpanel");
 
+    // "Complete the wardrobe" only lists what isn't owned yet — reflects
+    // ownership as of this render (page load / reload), same freshness the
+    // rotated outfit lists already have rather than live-updating.
+    const ownedNamesAtRender = new Set(getFullOwnedPool(WARDROBE_DATA).map((it) => it.name));
+    const missingItems = capsule.items.filter((item) => !ownedNamesAtRender.has(item.name));
+
     const itemsSection = document.createElement("section");
     itemsSection.className = "block";
     const itemsH2 = document.createElement("h2");
-    itemsH2.textContent = capsule.name + " items";
+    itemsH2.textContent = "Complete the " + capsule.name + " wardrobe";
     itemsSection.appendChild(itemsH2);
 
-    capsule.items.forEach((item) => {
-      const card = document.createElement("div");
-      card.className = "item-card";
+    if (missingItems.length === 0) {
+      const doneNote = document.createElement("p");
+      doneNote.className = "empty-note";
+      doneNote.textContent = "You already own everything in this capsule.";
+      itemsSection.appendChild(doneNote);
+    } else {
+      const intro = document.createElement("p");
+      intro.className = "empty-note";
+      intro.textContent = "Not yet in your wardrobe — pieces that would open up more outfits above.";
+      itemsSection.appendChild(intro);
 
-      const info = document.createElement("div");
-      info.className = "item-info";
-      const name = document.createElement("p");
-      name.className = "item-name";
-      name.textContent = item.name;
-      const price = document.createElement("p");
-      price.className = "item-price";
-      price.textContent = money(item.price);
-      info.appendChild(name);
-      info.appendChild(price);
+      missingItems.forEach((item) => {
+        const card = document.createElement("div");
+        card.className = "item-card";
 
-      card.appendChild(info);
-      card.appendChild(buyLink(item));
-      itemsSection.appendChild(card);
-    });
+        const info = document.createElement("div");
+        info.className = "item-info";
+        const name = document.createElement("p");
+        name.className = "item-name";
+        name.textContent = item.name;
+        const price = document.createElement("p");
+        price.className = "item-price";
+        price.textContent = money(item.price);
+        info.appendChild(name);
+        info.appendChild(price);
+
+        card.appendChild(info);
+        card.appendChild(buyLink(item, "buy-btn-secondary"));
+        itemsSection.appendChild(card);
+      });
+    }
 
     const outfitsSection = document.createElement("section");
     outfitsSection.className = "block";
@@ -153,7 +171,7 @@
     const rotateNote = document.createElement("p");
     rotateNote.className = "empty-note";
     rotateNote.textContent =
-      "Uses what's in My Wardrobe, plus at most one new piece per outfit from " + capsule.name + " items.";
+      "Built from what's in My Wardrobe first, plus at most one new piece per outfit from " + capsule.name + " items.";
     outfitsSection.appendChild(rotateNote);
 
     const rotateBtn = document.createElement("button");
@@ -214,8 +232,8 @@
 
     renderOutfitsList();
 
-    panel.appendChild(itemsSection);
     panel.appendChild(outfitsSection);
+    panel.appendChild(itemsSection);
     return panel;
   }
 
