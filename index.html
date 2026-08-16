@@ -96,6 +96,14 @@
         up wrong, override the season hint, or steer fit/colour/formality preferences.
       </p>
 
+      <label class="field-label" for="gemini-brands">Brands you shop</label>
+      <textarea id="gemini-brands" rows="7" spellcheck="false"></textarea>
+      <p class="field-hint">
+        One per line, as <code>Name | search URL</code> — <code>{q}</code> is replaced by the garment.
+        Used to find pieces an outfit needs that you don't own.
+        <button type="button" id="brands-reset" class="link-btn" hidden>Reset to defaults</button>
+      </p>
+
       <div class="modal-actions">
         <button type="button" id="settings-clear" class="ghost-btn">Remove key</button>
         <button type="submit" class="buy-btn">Save</button>

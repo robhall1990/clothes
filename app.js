@@ -124,14 +124,121 @@
 
     const missingWrap = el("div", "coverage-missing");
     coverage.missing.forEach((m) => {
-      const row = el("div", "coverage-missing-row");
-      const label = m.item ? m.item.name + " · " + money(m.item.price) : m.label;
-      row.appendChild(el("span", "coverage-missing-label", "Missing: " + label));
-      if (m.item) row.appendChild(buyLink(m.item, "buy-btn-secondary buy-btn-small"));
-      missingWrap.appendChild(row);
+      // A gap that matches a shortlisted product shows the real thing, price
+      // and all. Anything else is a described garment, so the only honest
+      // offer is "here's where to look for it".
+      if (m.item) {
+        const row = el("div", "coverage-missing-row");
+        row.appendChild(el("span", "coverage-missing-label", "Missing: " + m.item.name + " · " + money(m.item.price)));
+        row.appendChild(buyLink(m.item, "buy-btn-secondary buy-btn-small"));
+        missingWrap.appendChild(row);
+      } else {
+        missingWrap.appendChild(buildShopForGap(m.label));
+      }
     });
     badge.appendChild(missingWrap);
     return badge;
+  }
+
+  // Collapsed by default: a look needing three pieces would otherwise bury the
+  // outfit itself under twenty retailer links.
+  //
+  // Opening it looks for real, currently-available products via a
+  // search-grounded lookup. That can fail — no key, no quota, a model without
+  // grounding — so the plain brand searches are always rendered underneath and
+  // never depend on it.
+  function buildShopForGap(description) {
+    const details = el("details", "gap-shop");
+    const summary = el("summary", "gap-summary");
+    summary.appendChild(el("span", "coverage-missing-label", "Missing: " + description));
+    summary.appendChild(el("span", "gap-find", "Find it"));
+    details.appendChild(summary);
+
+    const found = el("div", "gap-found");
+    details.appendChild(found);
+
+    const brands = el("div", "brand-chips");
+    const brandsLabel = el("p", "gap-brands-label", "Or search:");
+    details.appendChild(brandsLabel);
+    S.getBrands().forEach((brand) => {
+      const a = el("a", "brand-chip", brand.name);
+      a.href = S.brandSearchUrl(brand, description);
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      brands.appendChild(a);
+    });
+    details.appendChild(brands);
+
+    function renderProducts(cached) {
+      found.innerHTML = "";
+      if (!cached || !cached.products.length) return;
+      cached.products.forEach((p) => {
+        const row = el("a", "found-product");
+        row.href = p.url;
+        row.target = "_blank";
+        row.rel = "noopener noreferrer";
+        const info = el("span", "found-info");
+        info.appendChild(el("span", "found-name", p.name));
+        info.appendChild(el("span", "found-retailer", p.retailer + (p.price ? " · " + p.price : "")));
+        row.appendChild(info);
+        row.appendChild(el("span", "found-go", "↗"));
+        found.appendChild(row);
+      });
+      if (cached.searchEntryPoint) {
+        const attrib = el("div", "search-entry");
+        attrib.innerHTML = cached.searchEntryPoint;
+        found.appendChild(attrib);
+      }
+    }
+
+    let started = false;
+    details.addEventListener("toggle", async () => {
+      if (!details.open || started) return;
+      started = true;
+
+      const cached = S.getFind(description);
+      if (cached) {
+        renderProducts(cached);
+        return;
+      }
+      if (typeof WardrobeGemini === "undefined" || !WardrobeGemini.getApiKey()) return;
+
+      found.innerHTML = "";
+      const status = el("p", "gap-status", "Looking for these in stock…");
+      found.appendChild(status);
+      try {
+        const res = await WardrobeGemini.findProducts({
+          description,
+          brands: S.getBrands(),
+          profile: S.getProfile(),
+        });
+        if (res.products.length) {
+          renderProducts(S.setFind(description, res.products, res.searchEntryPoint));
+        } else {
+          // Grounding worked but nothing usable came back — say so rather than
+          // leaving a spinner that never resolves.
+          found.innerHTML = "";
+          found.appendChild(el("p", "gap-status", "Nothing found in stock — try a search below."));
+        }
+      } catch (e) {
+        found.innerHTML = "";
+        found.appendChild(el("p", "gap-status", "Couldn't search for stock right now."));
+        // Retry on next open rather than caching the failure.
+        started = false;
+      }
+    });
+
+    return details;
+  }
+
+  function buildKindBadge(kind) {
+    if (kind !== "anchored" && kind !== "editorial") return null;
+    const isEditorial = kind === "editorial";
+    return el(
+      "span",
+      "kind-badge " + (isEditorial ? "kind-editorial" : "kind-anchored"),
+      isEditorial ? "Fresh idea" : "From your wardrobe"
+    );
   }
 
   function buildFeedbackRow(outfit, onChange) {
@@ -207,23 +314,18 @@
   function buildOutfitCard(outfit, cacheNamespace, opts) {
     const o = opts || {};
     const card = el("div", "outfit-card");
-    card.appendChild(el("p", "outfit-name", outfit.name));
+    if (outfit.kind === "editorial") card.classList.add("outfit-editorial");
+
+    const head = el("div", "outfit-head");
+    head.appendChild(el("p", "outfit-name", outfit.name));
+    const kindBadge = buildKindBadge(outfit.kind);
+    if (kindBadge) head.appendChild(kindBadge);
+    card.appendChild(head);
+
     card.appendChild(el("p", "outfit-pieces", outfit.pieces));
 
-    const coverage = S.resolveOwnership(outfit, D);
-    const badge = buildOwnershipBadge(coverage);
+    const badge = buildOwnershipBadge(S.resolveOwnership(outfit, D));
     if (badge) card.appendChild(badge);
-
-    // A suggested new piece that isn't already surfaced as a missing item.
-    const catalogue = S.catalogueByName(D);
-    const alreadyListed = coverage && coverage.missing.some((m) => m.item && m.item.name === outfit.newItem);
-    if (outfit.newItem && catalogue.has(outfit.newItem) && !alreadyListed) {
-      const item = catalogue.get(outfit.newItem);
-      const chip = el("div", "new-item-chip");
-      chip.appendChild(el("span", "new-item-label", "New: " + outfit.newItem + " · " + money(item.price)));
-      chip.appendChild(buyLink(item, "new-item-buy"));
-      card.appendChild(chip);
-    }
 
     if (o.showFeedback !== false) card.appendChild(buildFeedbackRow(outfit, o.onChange));
 
@@ -411,9 +513,8 @@
       el(
         "p",
         "empty-note",
-        "Built from what's in My Wardrobe first, plus at most one new piece per outfit from " +
-          capsule.name +
-          " items."
+        "Half built from what's in My Wardrobe to wear now, half fresh ideas that reach beyond it — " +
+          "with links to find anything you're missing."
       )
     );
 
@@ -1036,6 +1137,8 @@
     const styleSelect = document.getElementById("gemini-style");
     const textModelInput = document.getElementById("gemini-text-model");
     const styleNotesInput = document.getElementById("gemini-style-notes");
+    const brandsInput = document.getElementById("gemini-brands");
+    const brandsReset = document.getElementById("brands-reset");
     const clearBtn = document.getElementById("settings-clear");
 
     WardrobeGemini.MODEL_OPTIONS.forEach((opt) => {
@@ -1056,7 +1159,15 @@
       styleSelect.value = settings.style;
       textModelInput.value = settings.textModel;
       styleNotesInput.value = settings.styleNotes;
+      brandsInput.value = S.brandsToText();
+      brandsReset.hidden = !S.areBrandsCustomised();
     }
+
+    brandsReset.addEventListener("click", () => {
+      S.resetBrands();
+      brandsInput.value = S.brandsToText();
+      brandsReset.hidden = true;
+    });
 
     openBtn.addEventListener("click", () => {
       syncFormFromStorage();
@@ -1089,7 +1200,15 @@
         textModel: textModelInput.value.trim() || WardrobeGemini.DEFAULT_SETTINGS.textModel,
         styleNotes: styleNotesInput.value.trim(),
       });
+      // An empty or unparseable list would leave gaps with nowhere to shop, so
+      // fall back to the defaults rather than saving nothing.
+      const brands = S.brandsFromText(brandsInput.value);
+      if (brands.length) S.setBrands(brands);
+      else S.resetBrands();
       backdrop.hidden = true;
+      refreshCapsules();
+      refreshWardrobe();
+      refreshToday();
     });
   }
 
