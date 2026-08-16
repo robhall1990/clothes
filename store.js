@@ -16,6 +16,7 @@ const WardrobeStore = (function () {
     today: "wardrobe-capsule-today-v1",
     profile: "wardrobe-capsule-profile-v1",
     brands: "wardrobe-capsule-brands-v1",
+    finds: "wardrobe-capsule-product-finds-v1",
   };
 
   // Reasons offered when an outfit is rejected. "Why" is a far stronger
@@ -322,6 +323,29 @@ const WardrobeStore = (function () {
       .filter(Boolean);
   }
 
+  // Grounded product lookups cost an API call and a few seconds, so results
+  // are kept per garment. Stock and prices drift, hence the expiry.
+  const FIND_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+  const FIND_CAP = 40;
+
+  function getFind(description) {
+    const all = loadJson(KEYS.finds, {});
+    const hit = all[description];
+    if (!hit || Date.now() - hit.at > FIND_TTL_MS) return null;
+    return hit;
+  }
+
+  function setFind(description, products, searchEntryPoint) {
+    const all = loadJson(KEYS.finds, {});
+    all[description] = { products, searchEntryPoint: searchEntryPoint || "", at: Date.now() };
+    // Keep the most recent lookups only, so this can't grow without bound.
+    const keys = Object.keys(all).sort((a, b) => all[b].at - all[a].at);
+    const trimmed = {};
+    keys.slice(0, FIND_CAP).forEach((k) => (trimmed[k] = all[k]));
+    saveJson(KEYS.finds, trimmed);
+    return trimmed[description];
+  }
+
   function brandSearchUrl(brand, query) {
     const q = encodeURIComponent((query || "").trim());
     return brand.search.indexOf("{q}") !== -1 ? brand.search.replace("{q}", q) : brand.search + q;
@@ -462,6 +486,8 @@ const WardrobeStore = (function () {
     brandsToText,
     brandsFromText,
     brandSearchUrl,
+    getFind,
+    setFind,
     // ownership
     tokenize,
     namesMatch,

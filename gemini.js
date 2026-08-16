@@ -437,10 +437,104 @@ const WardrobeGemini = (function () {
     return outfits;
   }
 
+  /* ---------- Grounded product lookup ---------- */
+
+  // Hosts the wearer actually shops, derived from their brand search
+  // templates, used to discard any link that isn't one of their retailers.
+  function brandHosts(brands) {
+    const hosts = [];
+    (brands || []).forEach((b) => {
+      try {
+        hosts.push(new URL(b.search.replace("{q}", "x")).hostname.replace(/^www\d*\./, ""));
+      } catch (e) {
+        /* skip an unparseable template */
+      }
+    });
+    return hosts;
+  }
+
+  function hostMatches(url, hosts) {
+    try {
+      const h = new URL(url).hostname.replace(/^www\d*\./, "");
+      return hosts.some((known) => h === known || h.endsWith("." + known));
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // One product per line: Retailer | Name | £price | URL. Lenient on spacing
+  // and on a missing price, strict on the URL being a real link at one of the
+  // wearer's retailers — a hallucinated link is worse than no link.
+  function parseProductLines(text, hosts) {
+    const out = [];
+    (text || "").split("\n").forEach((raw) => {
+      const line = raw.replace(/^[-*\d.\s]+/, "").trim();
+      if (!line || line.indexOf("|") === -1) return;
+      const parts = line.split("|").map((p) => p.trim());
+      if (parts.length < 3) return;
+      const url = parts[parts.length - 1];
+      if (!/^https?:\/\//i.test(url) || !hostMatches(url, hosts)) return;
+      const priceMatch = parts.slice(1, -1).join(" ").match(/£\s?(\d+(?:\.\d{2})?)/);
+      out.push({
+        retailer: parts[0],
+        name: parts[1],
+        price: priceMatch ? "£" + priceMatch[1] : "",
+        url,
+      });
+    });
+    return out;
+  }
+
+  // Finds garments that actually exist right now. Grounding is what makes the
+  // links real rather than recalled — but it can't be combined with a response
+  // schema, so this is a separate, deliberately on-demand call.
+  async function findProducts({ description, brands, profile }) {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      throw new GeminiError("Add a Gemini API key in Settings first.", "no-key");
+    }
+    const { textModel } = getSettings();
+    const hosts = brandHosts(brands);
+    const retailers = (brands || []).map((b) => b.name).join(", ");
+
+    const prompt = [
+      "Search the web for men's " + description + " currently on sale at these UK retailers: " + retailers + ".",
+      profile && profile.sizes ? "The buyer wears: " + profile.sizes + "." : "",
+      "",
+      "List up to 5 real, currently available products, one per line, in exactly this format:",
+      "Retailer | Product name | £price | https://direct-product-url",
+      "",
+      "Only include products you actually found on those retailers' sites, with the real product page URL.",
+      "No commentary, no markdown, no bullet characters — just the lines.",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const json = await callGenerateContent(textModel, apiKey, {
+      contents: [{ parts: [{ text: prompt }] }],
+      tools: [{ google_search: {} }],
+    });
+
+    const candidate = json?.candidates?.[0];
+    const text = (candidate?.content?.parts || [])
+      .map((p) => (typeof p.text === "string" ? p.text : ""))
+      .join("\n");
+
+    const products = parseProductLines(text, hosts);
+
+    // Google's grounding terms require showing the search suggestions that
+    // came back with the answer.
+    const searchEntryPoint = candidate?.groundingMetadata?.searchEntryPoint?.renderedContent || "";
+
+    return { products, searchEntryPoint };
+  }
+
   return {
     MODEL_OPTIONS,
     STYLE_OPTIONS,
     DEFAULT_SETTINGS,
+    findProducts,
+    parseProductLines,
     getApiKey,
     setApiKey,
     getSettings,

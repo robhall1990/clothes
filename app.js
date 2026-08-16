@@ -142,6 +142,11 @@
 
   // Collapsed by default: a look needing three pieces would otherwise bury the
   // outfit itself under twenty retailer links.
+  //
+  // Opening it looks for real, currently-available products via a
+  // search-grounded lookup. That can fail — no key, no quota, a model without
+  // grounding — so the plain brand searches are always rendered underneath and
+  // never depend on it.
   function buildShopForGap(description) {
     const details = el("details", "gap-shop");
     const summary = el("summary", "gap-summary");
@@ -149,7 +154,12 @@
     summary.appendChild(el("span", "gap-find", "Find it"));
     details.appendChild(summary);
 
+    const found = el("div", "gap-found");
+    details.appendChild(found);
+
     const brands = el("div", "brand-chips");
+    const brandsLabel = el("p", "gap-brands-label", "Or search:");
+    details.appendChild(brandsLabel);
     S.getBrands().forEach((brand) => {
       const a = el("a", "brand-chip", brand.name);
       a.href = S.brandSearchUrl(brand, description);
@@ -158,6 +168,66 @@
       brands.appendChild(a);
     });
     details.appendChild(brands);
+
+    function renderProducts(cached) {
+      found.innerHTML = "";
+      if (!cached || !cached.products.length) return;
+      cached.products.forEach((p) => {
+        const row = el("a", "found-product");
+        row.href = p.url;
+        row.target = "_blank";
+        row.rel = "noopener noreferrer";
+        const info = el("span", "found-info");
+        info.appendChild(el("span", "found-name", p.name));
+        info.appendChild(el("span", "found-retailer", p.retailer + (p.price ? " · " + p.price : "")));
+        row.appendChild(info);
+        row.appendChild(el("span", "found-go", "↗"));
+        found.appendChild(row);
+      });
+      if (cached.searchEntryPoint) {
+        const attrib = el("div", "search-entry");
+        attrib.innerHTML = cached.searchEntryPoint;
+        found.appendChild(attrib);
+      }
+    }
+
+    let started = false;
+    details.addEventListener("toggle", async () => {
+      if (!details.open || started) return;
+      started = true;
+
+      const cached = S.getFind(description);
+      if (cached) {
+        renderProducts(cached);
+        return;
+      }
+      if (typeof WardrobeGemini === "undefined" || !WardrobeGemini.getApiKey()) return;
+
+      found.innerHTML = "";
+      const status = el("p", "gap-status", "Looking for these in stock…");
+      found.appendChild(status);
+      try {
+        const res = await WardrobeGemini.findProducts({
+          description,
+          brands: S.getBrands(),
+          profile: S.getProfile(),
+        });
+        if (res.products.length) {
+          renderProducts(S.setFind(description, res.products, res.searchEntryPoint));
+        } else {
+          // Grounding worked but nothing usable came back — say so rather than
+          // leaving a spinner that never resolves.
+          found.innerHTML = "";
+          found.appendChild(el("p", "gap-status", "Nothing found in stock — try a search below."));
+        }
+      } catch (e) {
+        found.innerHTML = "";
+        found.appendChild(el("p", "gap-status", "Couldn't search for stock right now."));
+        // Retry on next open rather than caching the failure.
+        started = false;
+      }
+    });
+
     return details;
   }
 
