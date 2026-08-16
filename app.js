@@ -1129,6 +1129,56 @@
       sel.addEventListener("change", renderPalettePreview)
     );
 
+    // Photo-based assessment. The result populates the form but deliberately
+    // doesn't save — colouring judged from a photo is a suggestion to review,
+    // not a verdict, and lighting can easily mislead it.
+    const photoInput = document.getElementById("colour-photos");
+    const analysisStatus = document.getElementById("colour-analysis-status");
+    const defaultStatus = analysisStatus.textContent;
+
+    photoInput.addEventListener("change", async () => {
+      const files = Array.from(photoInput.files || []).slice(0, 3);
+      if (!files.length) return;
+
+      if (typeof WardrobeGemini === "undefined" || !WardrobeGemini.getApiKey()) {
+        analysisStatus.textContent = "Add a Gemini API key in Settings first.";
+        analysisStatus.classList.add("generate-error");
+        photoInput.value = "";
+        return;
+      }
+
+      analysisStatus.classList.remove("generate-error");
+      analysisStatus.textContent =
+        "Assessing " + files.length + (files.length === 1 ? " photo" : " photos") + "…";
+
+      try {
+        // Faces need more detail than a flat-lay garment, but the photos are
+        // still downscaled before leaving the device.
+        const images = [];
+        for (const file of files) {
+          images.push(await fileToThumbnail(file, 768));
+        }
+        const result = await WardrobeGemini.analyseColouring({ images });
+
+        undertoneSel.value = result.undertone || "";
+        depthSel.value = result.depth || "";
+        contrastSel.value = result.contrast || "";
+        if (result.reasoning) colourNotesInput.value = result.reasoning;
+        renderPalettePreview();
+
+        const confidence = result.confidence ? result.confidence + " confidence" : "";
+        analysisStatus.textContent =
+          "Assessed" + (confidence ? " (" + confidence + ")" : "") + ". Adjust anything below, then Save.";
+        if (result.confidence === "low") analysisStatus.classList.add("generate-error");
+      } catch (e) {
+        analysisStatus.classList.add("generate-error");
+        analysisStatus.textContent = e && e.message ? e.message : "Couldn't assess those photos.";
+      } finally {
+        // Never hold on to the photo — the assessment is the only thing kept.
+        photoInput.value = "";
+      }
+    });
+
     function renderSummary() {
       const p = S.getProfile();
       const palette = S.getPalette();
@@ -1145,6 +1195,8 @@
       depthSel.value = p.depth || "";
       contrastSel.value = p.contrast || "";
       colourNotesInput.value = p.colourNotes || "";
+      analysisStatus.textContent = defaultStatus;
+      analysisStatus.classList.remove("generate-error");
       renderPalettePreview();
       editWrap.hidden = false;
       body.hidden = true;

@@ -1286,3 +1286,18 @@ nav.tab-bar button.active .dot {
 #profile-avoid {
   margin: 0;
 }
+
+.analyse-row {
+  margin-bottom: 4px;
+}
+
+.analyse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+#colour-analysis-status.generate-error {
+  color: var(--clay-dark);
+}
