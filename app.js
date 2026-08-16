@@ -1077,14 +1077,113 @@
     const editWrap = document.getElementById("profile-edit");
     const buildInput = document.getElementById("profile-build");
     const sizesInput = document.getElementById("profile-sizes");
+    const undertoneSel = document.getElementById("profile-undertone");
+    const depthSel = document.getElementById("profile-depth");
+    const contrastSel = document.getElementById("profile-contrast");
+    const colourNotesInput = document.getElementById("profile-colour-notes");
+    const paletteWrap = document.getElementById("profile-palette");
+    const swatches = document.getElementById("profile-swatches");
+    const avoidLine = document.getElementById("profile-avoid");
     const editBtn = document.getElementById("profile-edit-btn");
     const saveBtn = document.getElementById("profile-save");
     const cancelBtn = document.getElementById("profile-cancel");
     const resetBtn = document.getElementById("profile-reset");
 
+    const analysis = D.colourAnalysis;
+
+    // "Not set" is a real choice here: without an undertone the colour brief
+    // is omitted entirely rather than guessed.
+    function fillSelect(select, options, blankLabel) {
+      const blank = el("option", null, blankLabel);
+      blank.value = "";
+      select.appendChild(blank);
+      options.forEach((o) => {
+        const opt = el("option", null, o.label);
+        opt.value = o.value;
+        select.appendChild(opt);
+      });
+    }
+
+    fillSelect(undertoneSel, analysis.undertones, "Not set — no colour guidance");
+    fillSelect(depthSel, analysis.depths, "Not set");
+    fillSelect(contrastSel, analysis.contrasts, "Not set");
+
+    // Preview reads from the live form, not saved state, so the palette
+    // updates as the selects change rather than only after saving.
+    function renderPalettePreview() {
+      const undertone = analysis.undertones.find((u) => u.value === undertoneSel.value);
+      paletteWrap.hidden = !undertone;
+      if (!undertone) return;
+      swatches.innerHTML = "";
+      undertone.best.forEach((c) => {
+        const sw = el("span", "swatch");
+        sw.style.background = c.hex;
+        sw.title = c.name + " " + c.hex;
+        sw.setAttribute("aria-label", c.name);
+        swatches.appendChild(sw);
+      });
+      avoidLine.textContent = "Avoid near the face: " + undertone.avoid.join(", ") + ".";
+    }
+
+    [undertoneSel, depthSel, contrastSel].forEach((sel) =>
+      sel.addEventListener("change", renderPalettePreview)
+    );
+
+    // Photo-based assessment. The result populates the form but deliberately
+    // doesn't save — colouring judged from a photo is a suggestion to review,
+    // not a verdict, and lighting can easily mislead it.
+    const photoInput = document.getElementById("colour-photos");
+    const analysisStatus = document.getElementById("colour-analysis-status");
+    const defaultStatus = analysisStatus.textContent;
+
+    photoInput.addEventListener("change", async () => {
+      const files = Array.from(photoInput.files || []).slice(0, 3);
+      if (!files.length) return;
+
+      if (typeof WardrobeGemini === "undefined" || !WardrobeGemini.getApiKey()) {
+        analysisStatus.textContent = "Add a Gemini API key in Settings first.";
+        analysisStatus.classList.add("generate-error");
+        photoInput.value = "";
+        return;
+      }
+
+      analysisStatus.classList.remove("generate-error");
+      analysisStatus.textContent =
+        "Assessing " + files.length + (files.length === 1 ? " photo" : " photos") + "…";
+
+      try {
+        // Faces need more detail than a flat-lay garment, but the photos are
+        // still downscaled before leaving the device.
+        const images = [];
+        for (const file of files) {
+          images.push(await fileToThumbnail(file, 768));
+        }
+        const result = await WardrobeGemini.analyseColouring({ images });
+
+        undertoneSel.value = result.undertone || "";
+        depthSel.value = result.depth || "";
+        contrastSel.value = result.contrast || "";
+        if (result.reasoning) colourNotesInput.value = result.reasoning;
+        renderPalettePreview();
+
+        const confidence = result.confidence ? result.confidence + " confidence" : "";
+        analysisStatus.textContent =
+          "Assessed" + (confidence ? " (" + confidence + ")" : "") + ". Adjust anything below, then Save.";
+        if (result.confidence === "low") analysisStatus.classList.add("generate-error");
+      } catch (e) {
+        analysisStatus.classList.add("generate-error");
+        analysisStatus.textContent = e && e.message ? e.message : "Couldn't assess those photos.";
+      } finally {
+        // Never hold on to the photo — the assessment is the only thing kept.
+        photoInput.value = "";
+      }
+    });
+
     function renderSummary() {
       const p = S.getProfile();
-      body.textContent = p.build + ". " + p.sizes + ".";
+      const palette = S.getPalette();
+      body.textContent =
+        p.build + ". " + p.sizes + "." + (palette ? " " + palette.undertone.label + " colouring." : "");
       resetBtn.hidden = !S.isProfileCustomised();
     }
 
@@ -1092,6 +1191,13 @@
       const p = S.getProfile();
       buildInput.value = p.build;
       sizesInput.value = p.sizes;
+      undertoneSel.value = p.undertone || "";
+      depthSel.value = p.depth || "";
+      contrastSel.value = p.contrast || "";
+      colourNotesInput.value = p.colourNotes || "";
+      analysisStatus.textContent = defaultStatus;
+      analysisStatus.classList.remove("generate-error");
+      renderPalettePreview();
       editWrap.hidden = false;
       body.hidden = true;
       editBtn.hidden = true;
@@ -1109,8 +1215,19 @@
     cancelBtn.addEventListener("click", closeEditor);
 
     saveBtn.addEventListener("click", () => {
-      S.setProfile({ build: buildInput.value.trim(), sizes: sizesInput.value.trim() });
+      S.setProfile({
+        build: buildInput.value.trim(),
+        sizes: sizesInput.value.trim(),
+        undertone: undertoneSel.value,
+        depth: depthSel.value,
+        contrast: contrastSel.value,
+        colourNotes: colourNotesInput.value.trim(),
+      });
       closeEditor();
+      // Colour changes what suits, so anything showing outfits is now stale.
+      refreshCapsules();
+      refreshWardrobe();
+      refreshToday();
     });
 
     resetBtn.addEventListener("click", () => {

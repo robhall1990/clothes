@@ -36,6 +36,40 @@
       <textarea id="profile-build" rows="2" placeholder="e.g. 6ft, narrow shoulders, muscular legs"></textarea>
       <label class="field-label" for="profile-sizes">Sizes &amp; fit</label>
       <textarea id="profile-sizes" rows="2" placeholder="e.g. Tops M, trousers 32/32, shoes UK 10, slim-to-straight"></textarea>
+
+      <p class="field-label">Colouring</p>
+      <div class="analyse-row">
+        <input type="file" id="colour-photos" class="visually-hidden" accept="image/*" multiple />
+        <label class="ghost-btn full-width analyse-btn" for="colour-photos">📷 Assess from photos</label>
+      </div>
+      <p class="field-hint" id="colour-analysis-status">
+        Pick one or more clear photos of your face in natural light. They're sent to Gemini for the
+        assessment and then discarded — nothing is stored or uploaded anywhere else. Review the result
+        below and adjust before saving.
+      </p>
+
+      <label class="field-label" for="profile-undertone">Skin undertone</label>
+      <select id="profile-undertone"></select>
+      <p class="field-hint">
+        Or set it yourself — silver jewellery flatters more than gold, and veins look blue? Cool.
+        Gold wins and veins look green? Warm.
+      </p>
+
+      <label class="field-label" for="profile-depth">Overall depth</label>
+      <select id="profile-depth"></select>
+
+      <label class="field-label" for="profile-contrast">Hair-to-skin contrast</label>
+      <select id="profile-contrast"></select>
+
+      <label class="field-label" for="profile-colour-notes">Colour notes</label>
+      <input type="text" id="profile-colour-notes" autocomplete="off" placeholder="e.g. red beard, greying hair" />
+
+      <div id="profile-palette" hidden>
+        <p class="field-label">Your colours</p>
+        <div class="swatches" id="profile-swatches"></div>
+        <p class="field-hint" id="profile-avoid"></p>
+      </div>
+
       <p class="field-hint">Used in every outfit suggestion and generated image.</p>
       <div class="profile-actions">
         <button type="button" id="profile-cancel" class="ghost-btn">Cancel</button>

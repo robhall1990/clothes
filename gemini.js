@@ -82,10 +82,23 @@ const WardrobeGemini = (function () {
 
   function buildPrompt(capsuleName, outfit, profile, style) {
     if (style === "on-model") {
+      // Colouring matters here too: a look chosen for a cool complexion
+      // rendered on a warm-toned model doesn't show whether it suits.
+      const palette = typeof WardrobeStore !== "undefined" ? WardrobeStore.getPalette() : null;
+      const colouring = palette
+        ? " The man has a " +
+          palette.undertone.value +
+          " skin undertone" +
+          (palette.depth ? " and " + palette.depth.value + " overall colouring" : "") +
+          "."
+        : "";
+
       return (
         "Editorial fashion photograph of a man with this build: " +
         profile.build +
-        ". He is wearing: " +
+        "." +
+        colouring +
+        " He is wearing: " +
         outfit.pieces +
         ". Full-body shot, standing directly facing the camera, arms relaxed by his sides so every " +
         "garment is fully visible and unobscured — nothing cropped out, nothing tucked behind the body " +
@@ -285,6 +298,10 @@ const WardrobeGemini = (function () {
       getSeasonHint(new Date()),
     ];
 
+    // Colour brief, when the wearer has recorded their colouring.
+    const colours = typeof WardrobeStore !== "undefined" ? WardrobeStore.paletteBrief() : "";
+    if (colours) lines.push("", colours);
+
     // Live weather is more specific than the season and should win where they
     // disagree (a cold snap in June, a mild December).
     const weatherLine = weather && typeof WardrobeWeather !== "undefined" ? WardrobeWeather.promptLine(weather) : "";
@@ -437,6 +454,87 @@ const WardrobeGemini = (function () {
     return outfits;
   }
 
+  /* ---------- Colour analysis from photos ---------- */
+
+  function dataUrlToInlinePart(dataUrl) {
+    const match = /^data:([^;]+);base64,(.*)$/.exec(dataUrl || "");
+    if (!match) return null;
+    return { inlineData: { mimeType: match[1], data: match[2] } };
+  }
+
+  // Assesses the wearer's colouring from their own photos. The enums are taken
+  // straight from the palette definitions, so a result can only ever be one of
+  // the values the palette system already understands — no mapping, no drift.
+  async function analyseColouring({ images }) {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      throw new GeminiError("Add a Gemini API key in Settings first.", "no-key");
+    }
+    const analysis = (typeof WARDROBE_DATA !== "undefined" && WARDROBE_DATA.colourAnalysis) || null;
+    if (!analysis) throw new GeminiError("Colour analysis data unavailable.", "bad-response");
+
+    const parts = (images || []).map(dataUrlToInlinePart).filter(Boolean);
+    if (!parts.length) throw new GeminiError("No usable photo to analyse.", "no-image");
+
+    const prompt = [
+      "These are photos of the same person, who wants help choosing clothing colours that suit them.",
+      "Assess their natural colouring:",
+      "",
+      "1. Skin undertone — the underlying warmth or coolness of the skin, not how tanned it is. Look at " +
+        "the skin in even light, and at how it reads against any white or neutral fabric in shot.",
+      "2. Overall depth — how light or deep their colouring is overall, taking hair, skin and eyes together.",
+      "3. Contrast — how far apart their hair and skin are in depth. Dark hair with fair skin is high " +
+        "contrast; mid-brown hair with mid-toned skin is low.",
+      "",
+      "Account for the lighting: warm indoor bulbs push skin to look more golden and cool daylight or " +
+        "shade pushes it pinker, so judge the underlying tone rather than the cast of the photo. If the " +
+        "photos are poorly lit, filtered, or don't show the face clearly, say so and set confidence to low.",
+      "",
+      'Give brief reasoning in one or two sentences, in plain English, describing what you actually see — ' +
+        "hair colour, eye colour, and how the skin reads. No flattery, no styling advice.",
+    ].join("\n");
+
+    const json = await callGenerateContent(getSettings().textModel, apiKey, {
+      contents: [{ parts: parts.concat([{ text: prompt }]) }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            undertone: { type: "STRING", enum: analysis.undertones.map((u) => u.value) },
+            depth: { type: "STRING", enum: analysis.depths.map((d) => d.value) },
+            contrast: { type: "STRING", enum: analysis.contrasts.map((c) => c.value) },
+            confidence: { type: "STRING", enum: ["low", "medium", "high"] },
+            reasoning: { type: "STRING" },
+          },
+          required: ["undertone", "depth", "contrast", "confidence", "reasoning"],
+          propertyOrdering: ["undertone", "depth", "contrast", "confidence", "reasoning"],
+        },
+        temperature: 0.2,
+      },
+    });
+
+    const textPart = (json?.candidates?.[0]?.content?.parts || []).find((p) => typeof p.text === "string");
+    if (!textPart) throw new GeminiError("Gemini didn't return an assessment.", "bad-response");
+
+    let parsed;
+    try {
+      parsed = JSON.parse(textPart.text);
+    } catch (e) {
+      throw new GeminiError("Gemini's assessment wasn't valid JSON.", "bad-response");
+    }
+    if (!parsed || !parsed.undertone) {
+      throw new GeminiError("Gemini couldn't assess colouring from those photos.", "bad-response");
+    }
+    return {
+      undertone: parsed.undertone,
+      depth: parsed.depth,
+      contrast: parsed.contrast,
+      confidence: parsed.confidence || "",
+      reasoning: (parsed.reasoning || "").trim(),
+    };
+  }
+
   /* ---------- Grounded product lookup ---------- */
 
   // Hosts the wearer actually shops, derived from their brand search
@@ -535,6 +633,7 @@ const WardrobeGemini = (function () {
     DEFAULT_SETTINGS,
     findProducts,
     parseProductLines,
+    analyseColouring,
     getApiKey,
     setApiKey,
     getSettings,
