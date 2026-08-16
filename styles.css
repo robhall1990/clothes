@@ -1056,3 +1056,120 @@ nav.tab-bar button.active .dot {
   font-variant-numeric: tabular-nums;
   opacity: 0.75;
 }
+
+/* ---------- Anchored vs editorial ---------- */
+
+.outfit-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.outfit-head .outfit-name {
+  margin: 0;
+}
+
+.kind-badge {
+  flex-shrink: 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.kind-anchored {
+  background: rgba(110, 123, 87, 0.15);
+  color: #4f5a3d;
+}
+
+.kind-editorial {
+  background: rgba(181, 101, 63, 0.14);
+  color: var(--clay-dark);
+}
+
+.outfit-editorial {
+  border-left: 3px solid var(--clay);
+}
+
+/* ---------- Shoppable gaps ---------- */
+
+.gap-shop {
+  border-top: 1px dashed var(--border);
+  padding-top: 7px;
+}
+
+.gap-shop:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.gap-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+  min-height: 32px;
+}
+
+.gap-summary::-webkit-details-marker {
+  display: none;
+}
+
+.gap-find {
+  flex-shrink: 0;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--clay-dark);
+  white-space: nowrap;
+}
+
+.gap-shop[open] .gap-find {
+  opacity: 0.5;
+}
+
+.brand-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+
+.brand-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--charcoal-soft);
+  text-decoration: none;
+}
+
+.brand-chip:active {
+  background: var(--bg);
+  color: var(--charcoal);
+}
+
+#gemini-brands {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  background: var(--bg);
+  color: var(--charcoal);
+  resize: vertical;
+}

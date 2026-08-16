@@ -139,6 +139,26 @@ const WARDROBE_DATA = {
       ],
     },
   ],
+  // Where to look for a garment the wardrobe is missing.
+  //
+  // These are search templates, not product links, deliberately: outfit ideas
+  // describe garments freely ("straight-leg mid-wash jeans"), and no fixed
+  // product list can cover that. A search always resolves, never goes out of
+  // stock, and leaves size and budget to the wearer. {q} is the garment
+  // description, URL-encoded.
+  //
+  // Editable in Settings — retailers change their search paths, and these
+  // shouldn't need a code change to fix.
+  defaultBrands: [
+    { name: "M&S", search: "https://www.marksandspencer.com/search?q={q}" },
+    { name: "Autograph", search: "https://www.marksandspencer.com/search?q=autograph+{q}" },
+    { name: "H&M", search: "https://www2.hm.com/en_gb/search-results.html?q={q}" },
+    { name: "Paul Smith", search: "https://www.paulsmith.com/uk/search?q={q}" },
+    { name: "Arket", search: "https://www.arket.com/en-gb/search.html?q={q}" },
+    { name: "Percival", search: "https://www.percivalclo.com/search?q={q}" },
+    { name: "Clarks", search: "https://www.clarks.com/en-gb/search?q={q}" },
+  ],
+
   // Pieces the original capsule plan assumes are already owned. Offered as a
   // one-tap seed on the Wardrobe tab so outfit ownership badges mean something
   // before anything has been logged by hand.

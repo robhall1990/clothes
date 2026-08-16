@@ -15,6 +15,7 @@ const WardrobeStore = (function () {
     wears: "wardrobe-capsule-wear-log-v1",
     today: "wardrobe-capsule-today-v1",
     profile: "wardrobe-capsule-profile-v1",
+    brands: "wardrobe-capsule-brands-v1",
   };
 
   // Reasons offered when an outfit is rejected. "Why" is a far stronger
@@ -269,6 +270,63 @@ const WardrobeStore = (function () {
     return !!loadJson(KEYS.profile, null);
   }
 
+  /* ---------- Brands ---------- */
+
+  function defaultBrands() {
+    const base = (typeof WARDROBE_DATA !== "undefined" && WARDROBE_DATA.defaultBrands) || [];
+    return base.map((b) => ({ ...b }));
+  }
+
+  function getBrands() {
+    const saved = loadJson(KEYS.brands, null);
+    if (!Array.isArray(saved) || !saved.length) return defaultBrands();
+    return saved.filter((b) => b && b.name && b.search);
+  }
+
+  function setBrands(brands) {
+    saveJson(KEYS.brands, brands);
+    return getBrands();
+  }
+
+  function resetBrands() {
+    try {
+      localStorage.removeItem(KEYS.brands);
+    } catch (e) {
+      /* ignore */
+    }
+    return getBrands();
+  }
+
+  function areBrandsCustomised() {
+    return !!loadJson(KEYS.brands, null);
+  }
+
+  // Brands are stored one-per-line as "Name | https://…{q}" so they can be
+  // edited as plain text rather than through a bespoke list editor.
+  function brandsToText(brands) {
+    return (brands || getBrands()).map((b) => b.name + " | " + b.search).join("\n");
+  }
+
+  function brandsFromText(text) {
+    return (text || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const i = line.indexOf("|");
+        if (i === -1) return null;
+        const name = line.slice(0, i).trim();
+        const search = line.slice(i + 1).trim();
+        return name && search ? { name, search } : null;
+      })
+      .filter(Boolean);
+  }
+
+  function brandSearchUrl(brand, query) {
+    const q = encodeURIComponent((query || "").trim());
+    return brand.search.indexOf("{q}") !== -1 ? brand.search.replace("{q}", q) : brand.search + q;
+  }
+
   /* ---------- Outfit feedback (thumbs up / down) ---------- */
 
   // Keyed by outfit name so a rating survives rotation and re-generation of
@@ -396,6 +454,14 @@ const WardrobeStore = (function () {
     setProfile,
     resetProfile,
     isProfileCustomised,
+    // brands
+    getBrands,
+    setBrands,
+    resetBrands,
+    areBrandsCustomised,
+    brandsToText,
+    brandsFromText,
+    brandSearchUrl,
     // ownership
     tokenize,
     namesMatch,

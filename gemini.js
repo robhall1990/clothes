@@ -191,16 +191,9 @@ const WardrobeGemini = (function () {
     return dataUrl;
   }
 
-  // Gemini's structured-output enum rejects empty-string values, so "no new
-  // item" needs a real sentinel word rather than "" — chosen to never
-  // collide with an actual garment name.
-  const NO_NEW_ITEM = "None";
-
-  // newItemCandidates, when given, is a non-empty array of {name, price} for
-  // items the wearer doesn't yet own. The schema's enum is the enforcement
-  // mechanism for "at most one new item per outfit, if any" — the model can
-  // literally only choose one of the provided names, or NO_NEW_ITEM, never
-  // invent one or list several.
+  // newItemCandidates are pieces already shortlisted for purchase — offered to
+  // the model as preferred choices, but no longer the only ones it may reach
+  // for, since editorial looks need to name garments no fixed list contains.
   function buildOutfitSchema(newItemCandidates, wardrobeItems) {
     const properties = {
       name: { type: "STRING" },
@@ -221,14 +214,22 @@ const WardrobeGemini = (function () {
       propertyOrdering.push("usesOwned");
     }
 
-    if (newItemCandidates && newItemCandidates.length) {
-      properties.newItem = {
-        type: "STRING",
-        enum: newItemCandidates.map((it) => it.name).concat([NO_NEW_ITEM]),
-      };
-      required.push("newItem");
-      propertyOrdering.push("newItem");
-    }
+    // Anchored looks lean on the wardrobe; editorial ones are free to imagine
+    // pieces that aren't owned. Labelling them lets both appear side by side
+    // without one being mistaken for the other.
+    properties.kind = { type: "STRING", enum: ["anchored", "editorial"] };
+    required.push("kind");
+    propertyOrdering.push("kind");
+
+    // Garments the wearer doesn't own, described freely rather than picked
+    // from a fixed catalogue — a closed product list can't express "straight-leg
+    // mid-wash jeans", and that openness is the point of editorial looks.
+    properties.needed = {
+      type: "ARRAY",
+      items: { type: "STRING" },
+    };
+    required.push("needed");
+    propertyOrdering.push("needed");
 
     return {
       type: "ARRAY",
@@ -334,41 +335,39 @@ const WardrobeGemini = (function () {
       const newGarments = newItemCandidates.map((it) => "- " + it.name + " (£" + it.price + ")").join("\n");
       lines.push(
         "",
-        "Also available to buy, not yet owned (optional — use at most ONE of these per outfit, only when it " +
-          "clearly completes the look; many outfits should use none of them):",
+        "Shortlisted pieces the client is already considering buying. Prefer these when an anchored look " +
+          "needs something they don't own, since they're known to suit them:",
         newGarments
       );
     }
 
+    const anchored = Math.ceil(count / 2);
+    const editorial = count - anchored;
+
     lines.push(
       "",
+      "Produce TWO kinds of outfit, and label each in the \"kind\" field:",
+      '- "anchored" (' +
+        anchored +
+        " of them): built mainly from the Owned garments. At most ONE piece the client doesn't own, and only " +
+        "when it genuinely completes the look — several should need nothing at all. These are for wearing this week.",
+      '- "editorial" (' +
+        editorial +
+        "): fresh ideas that are NOT limited to the wardrobe. Style the occasion first and reach for whatever " +
+        "the look actually needs, using owned garments only where they genuinely fit. These exist to show the " +
+        "client something new, so be more adventurous — but keep them true to the tone of the examples and to " +
+        "the client's style notes.",
+      "",
       "Rules:",
-      '1. Use only garments from the lists above, referenced by a short recognisable version of their name (drop the brand if you like, keep the distinguishing detail, e.g. colour).',
-      "2. Never invent a garment that isn't listed.",
-      "3. Each outfit uses 2 to 5 garments and must be genuinely wearable together — matching formality, sensible for the same season, no obvious clashes.",
-      "4. Spread garments across the outfits rather than reusing the same one or two items every time; use as much of the owned wardrobe as sensibly possible.",
-      '5. Each outfit "name" is short (2-5 words) and specific to a moment or context, exactly like the examples above — never generic like "Outfit 1" or "Casual look".',
-      '6. Each outfit "pieces" string lists the garments joined with " + ", in the order worn outside-in, with an optional short styling note in parentheses (e.g. "(open)", "(tucked)", "(collar out)") — match the tone of the examples exactly.'
-    );
-
-    let n = 7;
-    if (wardrobeItems.length) {
-      lines.push(
-        n++ +
-          '. "usesOwned" lists the exact names (copied verbatim from the "Owned garments" list) of every owned garment the outfit uses. It must agree with "pieces" — same garments, no more, no fewer.'
-      );
-    }
-    if (hasNewItems) {
-      lines.push(
-        n++ +
-          '. If an outfit uses one of the "not yet owned" garments, its exact name (copied verbatim from that list) goes in the "newItem" field, and that garment must also appear in "pieces" like any other item. If an outfit uses none of them, set "newItem" to "' +
-          NO_NEW_ITEM +
-          '". Never use more than one not-yet-owned garment in a single outfit.'
-      );
-    }
-    lines.push(
-      n++ + ". Return exactly " + count + " outfits — no more, no fewer.",
-      n + ". Respond with JSON only, matching the given schema. No commentary, no markdown fences."
+      '1. Each outfit "name" is short (2-5 words) and specific to a moment or context, exactly like the examples above — never generic like "Outfit 1" or "Casual look".',
+      '2. Each outfit "pieces" string lists every garment joined with " + ", in the order worn outside-in, with an optional short styling note in parentheses (e.g. "(open)", "(tucked)", "(collar out)") — match the tone of the examples exactly.',
+      "3. Each outfit uses 2 to 5 garments and must be genuinely wearable together — matching formality, sensible for the season and weather, no obvious clashes.",
+      "4. Spread garments across the outfits rather than reusing the same one or two every time.",
+      '5. "usesOwned" lists the exact names, copied verbatim from the "Owned garments" list, of every owned garment the outfit uses. Copy them exactly or the app cannot match them.',
+      '6. "needed" lists every garment in the outfit the client does NOT own, described as you would search for it in a shop — generic and specific enough to find, e.g. "straight-leg mid-wash jeans", "unstructured navy linen blazer", "brown suede loafers". No brand names, no prices.',
+      '7. "usesOwned" and "needed" together must account for exactly the garments in "pieces" — nothing extra, nothing left out.',
+      "8. Return exactly " + count + " outfits — no more, no fewer.",
+      "9. Respond with JSON only, matching the given schema. No commentary, no markdown fences."
     );
 
     return lines.join("\n");
@@ -412,18 +411,19 @@ const WardrobeGemini = (function () {
     const outfits = parsed
       .filter((o) => o && typeof o.name === "string" && typeof o.pieces === "string")
       .map((o, i) => {
-        const rawNewItem = typeof o.newItem === "string" ? o.newItem.trim() : "";
-        const newItem = rawNewItem === NO_NEW_ITEM ? "" : rawNewItem;
-        const usesOwned = Array.isArray(o.usesOwned) ? o.usesOwned.filter((u) => typeof u === "string" && u) : [];
-        // `uses` is the full piece list — owned garments plus the optional new
-        // one — and is what ownership badges are computed from.
-        const uses = usesOwned.concat(newItem ? [newItem] : []);
+        const clean = (arr) =>
+          Array.isArray(arr) ? arr.filter((u) => typeof u === "string" && u.trim()).map((u) => u.trim()) : [];
+        const usesOwned = clean(o.usesOwned);
+        const needed = clean(o.needed);
         return {
           id: "gen-" + Date.now() + "-" + i,
           name: o.name.trim(),
           pieces: o.pieces.trim(),
-          newItem,
-          uses,
+          kind: o.kind === "editorial" ? "editorial" : "anchored",
+          needed,
+          // The full piece list, owned and not, which ownership badges resolve
+          // against.
+          uses: usesOwned.concat(needed),
         };
       });
 
