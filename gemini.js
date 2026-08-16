@@ -82,10 +82,23 @@ const WardrobeGemini = (function () {
 
   function buildPrompt(capsuleName, outfit, profile, style) {
     if (style === "on-model") {
+      // Colouring matters here too: a look chosen for a cool complexion
+      // rendered on a warm-toned model doesn't show whether it suits.
+      const palette = typeof WardrobeStore !== "undefined" ? WardrobeStore.getPalette() : null;
+      const colouring = palette
+        ? " The man has a " +
+          palette.undertone.value +
+          " skin undertone" +
+          (palette.depth ? " and " + palette.depth.value + " overall colouring" : "") +
+          "."
+        : "";
+
       return (
         "Editorial fashion photograph of a man with this build: " +
         profile.build +
-        ". He is wearing: " +
+        "." +
+        colouring +
+        " He is wearing: " +
         outfit.pieces +
         ". Full-body shot, standing directly facing the camera, arms relaxed by his sides so every " +
         "garment is fully visible and unobscured — nothing cropped out, nothing tucked behind the body " +
@@ -284,6 +297,10 @@ const WardrobeGemini = (function () {
       "Client: " + profile.build + ". Sizes: " + profile.sizes + ".",
       getSeasonHint(new Date()),
     ];
+
+    // Colour brief, when the wearer has recorded their colouring.
+    const colours = typeof WardrobeStore !== "undefined" ? WardrobeStore.paletteBrief() : "";
+    if (colours) lines.push("", colours);
 
     // Live weather is more specific than the season and should win where they
     // disagree (a cold snap in June, a mild December).

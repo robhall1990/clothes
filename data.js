@@ -139,6 +139,95 @@ const WARDROBE_DATA = {
       ],
     },
   ],
+  // Colour analysis, reduced to the three axes that actually change what
+  // suits someone: the undertone of the skin, how light or deep the overall
+  // colouring is, and how much contrast there is between hair, skin and eyes.
+  //
+  // Hex values exist so the palette can be shown as swatches rather than
+  // buried in a prompt — a colour brief you can't see is one you can't correct.
+  colourAnalysis: {
+    undertones: [
+      {
+        value: "warm",
+        label: "Warm — golden or peachy",
+        best: [
+          { name: "camel", hex: "#C19A6B" },
+          { name: "cream", hex: "#F5EBD9" },
+          { name: "olive green", hex: "#6B7043" },
+          { name: "rust", hex: "#A8452A" },
+          { name: "terracotta", hex: "#C86B4A" },
+          { name: "warm brown", hex: "#6F4E37" },
+          { name: "mustard", hex: "#C99A2E" },
+          { name: "forest green", hex: "#2F4F3A" },
+          { name: "tomato red", hex: "#C43A2E" },
+          { name: "teal", hex: "#2E6E6B" },
+        ],
+        avoid: ["stark black", "pure brilliant white", "icy pastels", "cool blue-greys", "fuchsia"],
+      },
+      {
+        value: "cool",
+        label: "Cool — pink or blue",
+        best: [
+          { name: "navy", hex: "#1F2A44" },
+          { name: "charcoal", hex: "#36393D" },
+          { name: "true white", hex: "#FBFBFD" },
+          { name: "burgundy", hex: "#6E1E3C" },
+          { name: "emerald", hex: "#1E6F52" },
+          { name: "cool grey", hex: "#8A8F98" },
+          { name: "sky blue", hex: "#6E9BC5" },
+          { name: "plum", hex: "#5A3A5A" },
+          { name: "raspberry", hex: "#A62A56" },
+          { name: "ice blue", hex: "#C7D8E8" },
+        ],
+        avoid: ["orange", "mustard", "camel", "warm golden browns", "tomato red"],
+      },
+      {
+        value: "neutral",
+        label: "Neutral — balanced",
+        best: [
+          { name: "soft navy", hex: "#2C3E56" },
+          { name: "teal", hex: "#2E7D7B" },
+          { name: "jade", hex: "#3E8E6F" },
+          { name: "soft white", hex: "#F3F1EC" },
+          { name: "taupe", hex: "#8B7E72" },
+          { name: "mid grey", hex: "#7C7C7C" },
+          { name: "dusty pink", hex: "#C9928E" },
+          { name: "denim blue", hex: "#4A6C8C" },
+          { name: "slate", hex: "#55606E" },
+          { name: "moss", hex: "#6E7F5C" },
+        ],
+        avoid: ["neon brights", "very muddy shades"],
+      },
+      {
+        value: "olive",
+        label: "Olive — yellow-green",
+        best: [
+          { name: "olive", hex: "#6B7043" },
+          { name: "cream", hex: "#F0E6D2" },
+          { name: "rust", hex: "#A8452A" },
+          { name: "teal", hex: "#2E6E6B" },
+          { name: "terracotta", hex: "#C86B4A" },
+          { name: "deep brown", hex: "#4A362A" },
+          { name: "sage", hex: "#9CA98B" },
+          { name: "bronze", hex: "#A97142" },
+          { name: "off-white", hex: "#EFE9DC" },
+          { name: "forest green", hex: "#2F4F3A" },
+        ],
+        avoid: ["pale icy pastels", "cool baby pink", "bright orange", "muddy yellow"],
+      },
+    ],
+    depths: [
+      { value: "light", label: "Light", note: "Keep colours in their lighter, softer register — very dark shades can overwhelm." },
+      { value: "medium", label: "Medium", note: "Mid-depth colours suit best; lighter and deeper shades both work in moderation." },
+      { value: "deep", label: "Deep", note: "Rich, deep versions of these colours suit best; washed-out pastels can look flat." },
+    ],
+    contrasts: [
+      { value: "low", label: "Low", note: "Hair, skin and eyes are close in depth, so tonal outfits in adjacent shades flatter most — avoid pairing very dark with very light." },
+      { value: "medium", label: "Medium", note: "Moderate contrast — both tonal and contrasting pairings work." },
+      { value: "high", label: "High", note: "Marked contrast between hair and skin, so strong pairings (deep with light) suit well; head-to-toe mid-tones can look washed out." },
+    ],
+  },
+
   // Where to look for a garment the wardrobe is missing.
   //
   // These are search templates, not product links, deliberately: outfit ideas

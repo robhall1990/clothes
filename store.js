@@ -254,8 +254,62 @@ const WardrobeStore = (function () {
   }
 
   function setProfile(profile) {
-    saveJson(KEYS.profile, { build: profile.build || "", sizes: profile.sizes || "" });
+    saveJson(KEYS.profile, {
+      build: profile.build || "",
+      sizes: profile.sizes || "",
+      undertone: profile.undertone || "",
+      depth: profile.depth || "",
+      contrast: profile.contrast || "",
+      colourNotes: profile.colourNotes || "",
+    });
     return getProfile();
+  }
+
+  // The colours that suit, derived from the profile. Returns null until an
+  // undertone is set — guessing someone's colouring would be worse than
+  // saying nothing, so outfit generation simply omits the colour brief.
+  function getPalette() {
+    const analysis = (typeof WARDROBE_DATA !== "undefined" && WARDROBE_DATA.colourAnalysis) || null;
+    if (!analysis) return null;
+    const profile = getProfile();
+    const undertone = analysis.undertones.find((u) => u.value === profile.undertone);
+    if (!undertone) return null;
+
+    const depth = analysis.depths.find((d) => d.value === profile.depth) || null;
+    const contrast = analysis.contrasts.find((c) => c.value === profile.contrast) || null;
+
+    return {
+      undertone,
+      depth,
+      contrast,
+      best: undertone.best,
+      avoid: undertone.avoid,
+      notes: (profile.colourNotes || "").trim(),
+    };
+  }
+
+  // The colour brief handed to Gemini, or "" when there's nothing to say.
+  function paletteBrief() {
+    const p = getPalette();
+    if (!p) return "";
+    const lines = [
+      "Colouring: " +
+        p.undertone.label.toLowerCase() +
+        " skin undertone" +
+        (p.depth ? ", " + p.depth.label.toLowerCase() + " overall depth" : "") +
+        (p.contrast ? ", " + p.contrast.label.toLowerCase() + " contrast" : "") +
+        ".",
+      "Colours that suit: " + p.best.map((c) => c.name).join(", ") + ".",
+      "Colours to avoid next to the face: " + p.avoid.join(", ") + ".",
+    ];
+    if (p.depth) lines.push(p.depth.note);
+    if (p.contrast) lines.push(p.contrast.note);
+    if (p.notes) lines.push("Also: " + p.notes.replace(/\.?$/, "."));
+    lines.push(
+      "Choose garment colours from the suiting list wherever the outfit allows, especially for pieces worn " +
+        "near the face. Owned garments may be worn even if off-palette, but don't build a look around one."
+    );
+    return lines.join(" ");
   }
 
   function resetProfile() {
@@ -478,6 +532,8 @@ const WardrobeStore = (function () {
     setProfile,
     resetProfile,
     isProfileCustomised,
+    getPalette,
+    paletteBrief,
     // brands
     getBrands,
     setBrands,
